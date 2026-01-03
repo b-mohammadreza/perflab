@@ -1,0 +1,13 @@
+# PerfLab
+
+PerfLab is a compiler-to-performance harness for C/C++: build with pinned clang/LLVM settings, run benchmarks with runtime-aware phase timing, and emit JSON results (optional perf counters later).
+
+## Build / run the CLI
+From repo root:
+- Build: `cargo build`
+- Help: `cargo run -- --help`
+- Run (WIP): `cargo run -- run --bench <name> --compiler <path> -- <compiler-flags...>`
+
+## Repo layout
+- `bench/` benchmarks (C/C++ kernels + harness + phase timing)
+- `runner/` Rust CLI runner/orchestrator
