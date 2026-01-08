@@ -14,6 +14,7 @@
 #include <iostream>
 #include <vector>
 #include <chrono>
+#include <algorithm>
 
 int main([[maybe_unused]] int argc,[[maybe_unused]] char* argv[])
 {
@@ -28,9 +29,9 @@ int main([[maybe_unused]] int argc,[[maybe_unused]] char* argv[])
 
     // Init matrices with all 0
     auto start_tick = std::chrono::steady_clock::now();
-    std::vector<std::vector<uint32_t>> mat_a(256, std::vector<uint32_t>(256, 0));
-    std::vector<std::vector<uint32_t>> mat_b(256, std::vector<uint32_t>(256, 0));
-    std::vector<std::vector<uint32_t>> mat_c(256, std::vector<uint32_t>(256, 0));   // C =A x B
+    std::vector<std::vector<uint32_t>> mat_a(mat_size, std::vector<uint32_t>(mat_size, 0));
+    std::vector<std::vector<uint32_t>> mat_b(mat_size, std::vector<uint32_t>(mat_size, 0));
+    std::vector<std::vector<uint32_t>> mat_c(mat_size, std::vector<uint32_t>(mat_size, 0));   // C =A x B
 
     // Init A and B using the input pattern
     for (uint32_t row = 0; row < mat_size; ++row)
@@ -41,16 +42,6 @@ int main([[maybe_unused]] int argc,[[maybe_unused]] char* argv[])
             mat_b[row][col] = (row * 3 + col * 7) & 0xFF;
         }
     }
-
-    auto reinit_mat_c = [&mat_c]() {
-        for (uint32_t row = 0; row < mat_size; ++row)
-        {
-            for (uint32_t col = 0; col < mat_size; ++col)
-            {
-                mat_c[row][col] = 0;
-            }
-        }
-    };
     auto end_tick = std::chrono::steady_clock::now();
     std::chrono::nanoseconds init_diff_ns = end_tick - start_tick;
 
@@ -58,8 +49,10 @@ int main([[maybe_unused]] int argc,[[maybe_unused]] char* argv[])
     start_tick = std::chrono::steady_clock::now();
     for (uint32_t it = 0; it < iter_num; ++it)
     {
-        if (it > 0)
-            reinit_mat_c();
+        // re-init mat_c
+        std::for_each(mat_c.begin(), mat_c.end(), [](std::vector<uint32_t> &row) {
+            std::for_each(row.begin(), row.end(), [](uint32_t &elem) { elem = 0; });
+        });
 
         for (uint32_t row = 0; row < mat_size; ++row)
         {

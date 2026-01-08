@@ -45,6 +45,6 @@ meson test -C bench/build reduce --verbose
 
 Or run binaries directly:
 ```bash
-./bench/build/reduce
-./bench/build/matmul
+./bench/build/bench/reduce
+./bench/build/bench/matmul
 ```

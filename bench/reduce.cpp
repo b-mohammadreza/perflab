@@ -23,7 +23,6 @@ int main([[maybe_unused]] int argc,[[maybe_unused]] char* argv[])
     */
     auto start_tick = std::chrono::steady_clock::now();
     std::vector<uint32_t> input_arr;
-    input_arr.reserve(input_size);      // Maybe not a good idea for large input sizes
 
     // Init the array using the input pattern
     for (uint32_t elem = 0; elem < input_size; ++elem)
