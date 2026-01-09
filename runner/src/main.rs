@@ -139,14 +139,14 @@ fn runner_run (bench: &String, compiler: &String, compiler_args: &Vec<String>, m
         let result_schema = json!({
             "meta": {
                 "timestamp": metadata.timestamp,
-                "git_sha": metadata.git_sha,
+                "git_sha": metadata.git_sha.trim_end().replace(['\r', '\n'], ", "),
                 "compiler": {
                     "path": compiler,
-                    "version": metadata.compiler_ver
+                    "version": metadata.compiler_ver.trim_end().replace(['\r', '\n'], ", ")
                 },
-                "uname": metadata.uname,
+                "uname": metadata.uname.trim_end().replace(['\r', '\n'], ", "),
                 "bench": bench,
-                "compiler_args": format!("{:?}", compiler_args)
+                "compiler_args": compiler_args
             },
             "bench_output": bench_json_val
         });
