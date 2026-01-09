@@ -13,3 +13,7 @@ Decisions (v0):
 - Single-thread-first (reduce noise; add OpenMP later).
 - Phase timing is inside benchmarks; runner wraps/records results.
 - Perf counters are best-effort via `perf stat` user-space events (`:u`); if unavailable, still produce JSON.
+
+Milestone (Q1): end-to-end v0 CPU runner achieved (compile bench → run → capture phase JSON → write results/*.json with metadata).
+Status: done (Jan 2026).
+
