@@ -48,3 +48,15 @@ Or run binaries directly:
 ./bench/build/bench/reduce
 ./bench/build/bench/matmul
 ```
+
+## Perf counters (Linux perf stat)
+
+PerfLab can optionally collect CPU performance counters via Linux `perf stat`. When enabled, PerfLab runs the benchmark under `perf stat` and stores counters under `perf.events` in the results JSON.
+
+Notes:
+- PerfLab uses *user-space* events (the `:u` suffix), e.g. `cycles:u` and `instructions:u`.
+- On some systems, `perf` access is restricted (kernel `perf_event_paranoid`, SELinux/AppArmor, etc.). In that case PerfLab falls back to a normal run and writes `"perf": null` in the results JSON.
+
+Example:
+```bash
+cargo run -- run --perf --bench reduce --compiler clang++ -- -O3
