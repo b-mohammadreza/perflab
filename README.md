@@ -4,7 +4,7 @@
 From repo root:
 - Build: `cargo build`
 - Help: `cargo run -- --help`
-- Run (WIP): `cargo run -- run --bench <name> --compiler <path> -- <compiler-flags...>`
+- Run: `cargo run -- run --bench <name> --compiler <path> -- <compiler-flags...>`
 
 ## Repo layout
 - `bench/` benchmarks (C/C++ kernels + harness + phase timing)

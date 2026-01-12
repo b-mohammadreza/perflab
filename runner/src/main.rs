@@ -173,7 +173,7 @@ fn runner_run (perf: bool, runner_args: (&String, &String, &Vec<String>), metada
     let bench_json = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
     if bench_json.is_empty() == true {
-        return;
+        panic!("Dead path!");
     }
 
     if perf == true && fallback == false {

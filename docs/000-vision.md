@@ -1,6 +1,6 @@
 # PerfLab — Vision (v0)
 
-Mission: a reproducible “compiler → performance” lab for C/C++ that detects regressions, separates runtime phases, and offers basic attribution hints.
+Mission: ... TBD
 
 Near-term MVP (target: next week): end-to-end flow works:
 C/C++ benchmark → clang build → run → benchmark emits phase timing (init/compute/teardown) → runner writes one JSON result file with metadata.
