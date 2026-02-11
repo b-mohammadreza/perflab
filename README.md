@@ -60,3 +60,29 @@ Notes:
 Example:
 ```bash
 cargo run -- run --perf --bench reduce --compiler clang++ -- -O3
+```
+
+## CPU pinning (determinism on hybrid CPUs)
+
+PerfLab can pin the entire run (compile + perf collection + benchmark execution) to a single logical CPU to reduce noise and make results repeatable—especially on hybrid Intel systems (P-cores + E-cores).
+
+### Usage
+```bash
+perflab run --cpu <cpu_id> --bench matmul --compiler clang++ -- -O3
+perflab run --cpu <cpu_id> --perf --bench matmul --compiler clang++ -- -O3
+```
+
+`<cpu_id>` is a Linux logical CPU ID (the same numbering used by taskset -c).
+
+### How to pick a CPU ID
+
+List available logical CPUs:
+```bash
+lscpu -e=CPU,CORE,SOCKET,MAXMHZ
+```
+
+On hybrid systems, pinning to different CPU IDs may change which PMU block reports non-zero counters (e.g., `cpu_core/*` vs `cpu_atom/*`). For consistent comparisons, reuse the same `--cpu` value across runs.
+
+### Output metadata
+
+When `--cpu` is provided, results include the chosen CPU ID in metadata (e.g., `meta.cpu_pin`), so runs are self-describing.
