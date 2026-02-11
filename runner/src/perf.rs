@@ -6,7 +6,7 @@ pub fn run_perf(bench: &String, timestamp: &String) -> (bool, Output) {
         .arg("stat")
         .arg("-x,")
         .arg("-e")
-        .arg("cycles:u,instructions:u,nonesence")
+        .arg("cycles:u,instructions:u")
         .arg("-o")
         .arg(format!("out/perf_{}_{}.csv", timestamp, bench))
         .arg("--")
