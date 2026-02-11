@@ -1,5 +1,6 @@
 use std::process::Command;
 
+/// runner_args: &bench, &compiler, &compiler_args
 pub fn runner_compile(runner_args: (&String, &String, &Vec<String>)) -> u32 {
     let mut cmd = Command::new(runner_args.1);
     for compiler_arg in runner_args.2.iter() {

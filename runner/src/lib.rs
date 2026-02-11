@@ -7,3 +7,4 @@ mod compile;
 mod io;
 mod perf;
 mod run;
+mod affinity;

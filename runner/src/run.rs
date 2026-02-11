@@ -1,18 +1,16 @@
-use crate::io;
-use crate::meta::RunnerMetadata;
-use crate::perf;
 use std::{
-    collections::HashMap,
     process::{Command, Output},
 };
+use crate::meta::RunnerMetadata;
+use crate::perf;
 
+/// runner_args: &bench, &compiler, &compiler_args
 pub fn runner_run(
     perf: bool,
     runner_args: (&String, &String, &Vec<String>),
     metadata: &RunnerMetadata,
-) {
+) -> (bool, String) {
     let mut output: Output;
-    let mut perf_events: HashMap<String, u64> = HashMap::new();
     let mut fallback: bool = false;
 
     match perf {
@@ -47,17 +45,7 @@ pub fn runner_run(
         }
     }
 
-    let bench_json = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
-    if bench_json.is_empty() == true {
-        panic!("perflab-Dead path!");
-    }
-
-    if perf == true && fallback == false {
-        io::get_perf_events((&runner_args.0, &metadata.timestamp), &mut perf_events);
-    }
-
-    io::runner_write_json(fallback, &bench_json, &perf_events, runner_args, &metadata);
+    (fallback, String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
 pub fn run_bench(bench: &String) -> Output {

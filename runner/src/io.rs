@@ -6,8 +6,28 @@ use std::{
     io::{Read, Write},
 };
 
-pub fn get_perf_events(csv_file_name: (&String, &String), events: &mut HashMap<String, u64>) {
+/// runner_args: &bench, &compiler, &compiler_args, perf, cpu
+pub fn finalize_and_write_result(
+    fallback: bool,
+    runner_args: (&String, &String, &Vec<String>, bool, Option<u16>),
+    metadata: &RunnerMetadata,
+    bench_json: &String
+) {
+    if bench_json.is_empty() == true {
+        panic!("perflab-Dead path!");
+    }
+
+    let mut perf_events: HashMap<String, u64> = HashMap::new();
+    if runner_args.3 == true && fallback == false {
+        perf_events = get_perf_events((&runner_args.0, &metadata.timestamp));
+    }
+
+    runner_write_json(fallback, &bench_json, &perf_events, runner_args, &metadata);
+}
+
+pub fn get_perf_events(csv_file_name: (&String, &String)) -> HashMap<String, u64> {
     let mut csv_file_text: String = String::new();
+    let mut perf_events: HashMap<String, u64> = HashMap::new();
 
     fs::File::open(format!(
         "out/perf_{}_{}.csv",
@@ -35,23 +55,32 @@ pub fn get_perf_events(csv_file_name: (&String, &String), events: &mut HashMap<S
             Err(_) => continue,
         };
 
-        events.insert(fields[2].trim().to_string(), stat);
+        perf_events.insert(fields[2].trim().to_string(), stat);
     }
+
+    perf_events
 }
 
+/// runner_args: &bench, &compiler, &compiler_args, perf, cpu
 pub fn runner_write_json(
     fallback: bool,
     bench_json: &String,
     perf_events: &HashMap<String, u64>,
-    runner_args: (&String, &String, &Vec<String>),
+    runner_args: (&String, &String, &Vec<String>, bool, Option<u16>),
     metadata: &RunnerMetadata,
 ) {
     let bench_json_val: Value = serde_json::from_str(&bench_json).unwrap_or_else(|err| {
         panic!("perflab-Failed to parse bench output, error:\n{err}");
     });
 
+    let mut cpu_pin = json!(null);
+    if let Some(cpu_id) = runner_args.4 {
+        cpu_pin = json!(cpu_id);
+    }
+
     let mut result_schema = json!({
         "meta": {
+            "cpu_pin": cpu_pin,
             "timestamp": metadata.timestamp,
             "git_sha": metadata.git_sha.trim_end().replace(['\r', '\n'], ", "),
             "compiler": {

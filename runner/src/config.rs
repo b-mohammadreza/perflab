@@ -10,8 +10,12 @@ pub struct CmdLine {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Runs the benchmark. Options: [--perf] --bench <name>, --compiler <name> -- <flags...>
+    /// Runs the benchmark. Options: [--cpu <id>] [--perf] --bench <name>, --compiler <name> -- <flags...>
     Run {
+        /// logical Linux CPU ID
+        #[arg(short, long, value_name = "id")]
+        cpu: Option<u16>,
+
         /// Collect perf stat counters (best-effort)
         #[arg(short, long, action = clap::ArgAction::SetTrue)]
         perf: bool,
