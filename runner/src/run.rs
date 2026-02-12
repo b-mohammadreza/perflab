@@ -9,23 +9,23 @@ pub fn runner_run(
     metadata: &RunnerMetadata,
 ) -> (bool, String) {
     let mut output: Output;
-    let mut fallback: bool = false;
+    let mut falledback: bool = false;
 
     match perf {
         false => {
             output = run_bench(runner_args.0);
         }
         true => {
-            (fallback, output) = perf::run_perf(runner_args.0, &metadata.timestamp);
+            (falledback, output) = perf::run_perf(runner_args.0, &metadata.timestamp);
         }
     }
 
     if output.status.success() == false {
         let runner_stdrr = String::from_utf8_lossy(&output.stderr);
 
-        if perf == false || fallback == true {
+        if perf == false || falledback == true {
             /*
-             *  If <perf == true> and also <fallback == true>:
+             *  If <perf == true> and also <falledback == true> (already falled back):
              *      at this point, because <output.status> is failed, it means
              *      "perf" command execution was failed in perf::run_perf() and
              *      also the fallback command execution
@@ -33,18 +33,18 @@ pub fn runner_run(
              */
             panic!("perflab:\n{runner_stdrr}");
         } else {
-            // perf == true and fallback == false, falling back...
+            // <perf == true> and <falledback == false> (not yet falled back), falling back...
             println!("perflab-Unable to get perf stat, falling back..., error:\n{runner_stdrr}");
             output = run_bench(runner_args.0);
             if output.status.success() == false {
                 panic!("perflab:\n{}", String::from_utf8_lossy(&output.stderr));
             }
-            fallback = true;
+            falledback = true;
         }
     }
 
     (
-        fallback,
+        falledback,
         String::from_utf8_lossy(&output.stdout).trim().to_string(),
     )
 }
