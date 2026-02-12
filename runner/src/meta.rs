@@ -25,7 +25,7 @@ pub fn metadata_capture(compiler: &String) -> RunnerMetadata {
         });
     if git_sha_output.status.success() == false {
         let err_str = String::from_utf8_lossy(&git_sha_output.stderr);
-        println!("{err_str}");
+        panic!("perflab-Command(git) execution failed, error:\n{err_str}");
     } else {
         metadata.git_sha = String::from_utf8_lossy(&git_sha_output.stdout).to_string();
     }
@@ -38,7 +38,7 @@ pub fn metadata_capture(compiler: &String) -> RunnerMetadata {
         });
     if compiler_ver_output.status.success() == false {
         let err_str = String::from_utf8_lossy(&compiler_ver_output.stderr);
-        println!("{err_str}");
+        panic!("perflab-Command({compiler}) execution failed, error:\n{err_str}");
     } else {
         metadata.compiler_ver = String::from_utf8_lossy(&compiler_ver_output.stdout).to_string();
     }
@@ -51,7 +51,7 @@ pub fn metadata_capture(compiler: &String) -> RunnerMetadata {
         });
     if uname_output.status.success() == false {
         let err_str = String::from_utf8_lossy(&uname_output.stderr);
-        println!("{err_str}");
+        panic!("perflab-Failed to execute command(uname), error:\n{err_str}");
     } else {
         metadata.uname = String::from_utf8_lossy(&uname_output.stdout).to_string();
     }
