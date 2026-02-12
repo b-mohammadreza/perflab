@@ -25,7 +25,7 @@ pub fn runner_run(
 
         if perf == false || fellback == true {
             /*
-             *  If <perf == true> and also <fellback == true> (already falled back):
+             *  If <perf == true> and also <fellback == true> (already fell back):
              *      at this point, because <output.status> is failed, it means
              *      "perf" command execution was failed in perf::run_perf() and
              *      also the fallback command execution
@@ -33,7 +33,7 @@ pub fn runner_run(
              */
             panic!("perflab:\n{runner_stdrr}");
         } else {
-            // <perf == true> and <fellback == false> (not yet falled back), falling back...
+            // <perf == true> and <fellback == false> (not yet fell back), falling back...
             println!("perflab-Unable to get perf stat, falling back..., error:\n{runner_stdrr}");
             output = run_bench(runner_args.0);
             if output.status.success() == false {
