@@ -11,7 +11,7 @@ pub fn finalize_and_write_result(
     fallback: bool,
     runner_args: (&String, &String, &Vec<String>, bool, Option<u16>),
     metadata: &RunnerMetadata,
-    bench_json: &String
+    bench_json: &String,
 ) {
     if bench_json.is_empty() == true {
         panic!("perflab-Dead path!");

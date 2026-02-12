@@ -1,8 +1,6 @@
-use std::{
-    process::{Command, Output},
-};
 use crate::meta::RunnerMetadata;
 use crate::perf;
+use std::process::{Command, Output};
 
 /// runner_args: &bench, &compiler, &compiler_args
 pub fn runner_run(
@@ -45,7 +43,10 @@ pub fn runner_run(
         }
     }
 
-    (fallback, String::from_utf8_lossy(&output.stdout).trim().to_string())
+    (
+        fallback,
+        String::from_utf8_lossy(&output.stdout).trim().to_string(),
+    )
 }
 
 pub fn run_bench(bench: &String) -> Output {

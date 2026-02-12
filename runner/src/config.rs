@@ -13,7 +13,7 @@ pub enum Commands {
     /// Runs the benchmark. Options: [--cpu <id>] [--perf] --bench <name>, --compiler <name> -- <flags...>
     Run {
         /// logical Linux CPU ID
-        #[arg(short, long, value_name = "id")]
+        #[arg(long, value_name = "id")]
         cpu: Option<u16>,
 
         /// Collect perf stat counters (best-effort)
