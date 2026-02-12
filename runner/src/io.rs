@@ -110,7 +110,7 @@ pub fn runner_write_json(
         result_schema
             .as_object_mut()
             .unwrap_or_else(|| {
-                panic!("perflab-Failed to get underlying object map (result_schema, fallback)!");
+                panic!("perflab-Failed to get underlying object map (result_schema, fellback)!");
             })
             .insert("perf".to_string(), json!(null));
     }
