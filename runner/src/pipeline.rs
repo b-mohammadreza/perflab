@@ -23,11 +23,11 @@ pub fn execute(config: Commands) {
             let result = compile::runner_compile((&bench, &compiler, &compiler_args));
 
             if result == 0 {
-                let (fallback, bench_jason) =
+                let (fellback, bench_jason) =
                     run::runner_run(perf, (&bench, &compiler, &compiler_args), &metadata);
 
                 io::finalize_and_write_result(
-                    fallback,
+                    fellback,
                     (&bench, &compiler, &compiler_args, perf, cpu),
                     &metadata,
                     &bench_jason,

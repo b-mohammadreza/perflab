@@ -8,7 +8,7 @@ use std::{
 
 /// runner_args: &bench, &compiler, &compiler_args, perf, cpu
 pub fn finalize_and_write_result(
-    fallback: bool,
+    fellback: bool,
     runner_args: (&String, &String, &Vec<String>, bool, Option<u16>),
     metadata: &RunnerMetadata,
     bench_json: &String,
@@ -18,11 +18,11 @@ pub fn finalize_and_write_result(
     }
 
     let mut perf_events: HashMap<String, u64> = HashMap::new();
-    if runner_args.3 == true && fallback == false {
+    if runner_args.3 == true && fellback == false {
         perf_events = get_perf_events((&runner_args.0, &metadata.timestamp));
     }
 
-    runner_write_json(fallback, &bench_json, &perf_events, runner_args, &metadata);
+    runner_write_json(fellback, &bench_json, &perf_events, runner_args, &metadata);
 }
 
 pub fn get_perf_events(csv_file_name: (&String, &String)) -> HashMap<String, u64> {
@@ -63,7 +63,7 @@ pub fn get_perf_events(csv_file_name: (&String, &String)) -> HashMap<String, u64
 
 /// runner_args: &bench, &compiler, &compiler_args, perf, cpu
 pub fn runner_write_json(
-    fallback: bool,
+    fellback: bool,
     bench_json: &String,
     perf_events: &HashMap<String, u64>,
     runner_args: (&String, &String, &Vec<String>, bool, Option<u16>),
@@ -106,7 +106,7 @@ pub fn runner_write_json(
                     "events" : perf_events
                 }),
             );
-    } else if fallback == true {
+    } else if fellback == true {
         result_schema
             .as_object_mut()
             .unwrap_or_else(|| {
