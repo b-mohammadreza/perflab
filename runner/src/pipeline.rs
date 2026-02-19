@@ -1,38 +1,28 @@
 use crate::affinity;
 use crate::compile;
-use crate::config::Commands;
+use crate::config;
 use crate::io;
 use crate::meta;
 use crate::run;
 
-pub fn execute(config: Commands) {
-    match config {
-        Commands::Run {
-            cpu,
-            perf,
-            bench,
-            compiler,
-            compiler_args,
-        } => {
-            if let Some(val) = cpu {
-                affinity::set_affinity(val);
-            }
+pub fn execute(config: config::Commands) {
+    config::init_runner_args(config);
 
-            let metadata = meta::metadata_capture(&compiler);
+    let runner_args = config::get_runner_args();
 
-            let result = compile::runner_compile((&bench, &compiler, &compiler_args));
+    if let Some(val) = runner_args.cpu {
+        affinity::set_affinity(val);
+    }
 
-            if result == 0 {
-                let (fellback, bench_jason) =
-                    run::runner_run(perf, (&bench, &compiler, &compiler_args), &metadata);
+    meta::metadata_capture();
 
-                io::finalize_and_write_result(
-                    fellback,
-                    (&bench, &compiler, &compiler_args, perf, cpu),
-                    &metadata,
-                    &bench_jason,
-                );
-            }
-        }
+    let result = compile::runner_compile();
+
+    if result == 0 {
+        let timestamp = meta::get_timestamp();
+
+        let (fellback, bench_jason) = run::runner_run(&timestamp);
+
+        io::finalize_and_write_result(fellback, &timestamp, &bench_jason);
     }
 }

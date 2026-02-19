@@ -1,4 +1,5 @@
-use crate::meta::RunnerMetadata;
+use crate::config::get_runner_args;
+use crate::meta::get_sys_env_meta;
 use serde_json::{Value, json};
 use std::fs;
 use std::{
@@ -6,46 +7,41 @@ use std::{
     io::{Read, Write},
 };
 
-/// runner_args: &bench, &compiler, &compiler_args, perf, cpu
-pub fn finalize_and_write_result(
-    fellback: bool,
-    runner_args: (&String, &String, &Vec<String>, bool, Option<u16>),
-    metadata: &RunnerMetadata,
-    bench_json: &String,
-) {
+pub fn finalize_and_write_result(fellback: bool, timestamp: &String, bench_json: &String) {
+    let runner_args = get_runner_args();
+
     if bench_json.is_empty() == true {
         panic!("perflab-Dead path!");
     }
 
     let mut perf_events: HashMap<String, u64> = HashMap::new();
-    if runner_args.3 == true && fellback == false {
-        perf_events = get_perf_events((&runner_args.0, &metadata.timestamp));
+    if runner_args.perf == true && fellback == false {
+        perf_events = get_perf_events(timestamp);
     }
 
-    runner_write_json(fellback, &bench_json, &perf_events, runner_args, &metadata);
+    runner_write_json(fellback, &bench_json, &perf_events, timestamp);
 }
 
-pub fn get_perf_events(csv_file_name: (&String, &String)) -> HashMap<String, u64> {
+pub fn get_perf_events(timestamp: &String) -> HashMap<String, u64> {
+    let runner_args = get_runner_args();
+
     let mut csv_file_text: String = String::new();
     let mut perf_events: HashMap<String, u64> = HashMap::new();
 
-    fs::File::open(format!(
-        "out/perf_{}_{}.csv",
-        csv_file_name.1, csv_file_name.0
-    ))
-    .unwrap_or_else(|err| {
-        panic!(
-            "perflab-Cannot open file(out/perf_{}_{}.csv), error:\n{err}",
-            csv_file_name.1, csv_file_name.0
-        );
-    })
-    .read_to_string(&mut csv_file_text)
-    .unwrap_or_else(|err| {
-        panic!(
-            "perflab-Failed reading file(out/perf_{}_{}.csv), error:\n{err}",
-            csv_file_name.1, csv_file_name.0
-        );
-    });
+    fs::File::open(format!("out/perf_{}_{}.csv", timestamp, runner_args.bench))
+        .unwrap_or_else(|err| {
+            panic!(
+                "perflab-Cannot open file(out/perf_{}_{}.csv), error:\n{err}",
+                timestamp, runner_args.bench
+            );
+        })
+        .read_to_string(&mut csv_file_text)
+        .unwrap_or_else(|err| {
+            panic!(
+                "perflab-Failed reading file(out/perf_{}_{}.csv), error:\n{err}",
+                timestamp, runner_args.bench
+            );
+        });
 
     for line in csv_file_text.lines() {
         let fields: Vec<&str> = line.split(',').collect();
@@ -61,35 +57,36 @@ pub fn get_perf_events(csv_file_name: (&String, &String)) -> HashMap<String, u64
     perf_events
 }
 
-/// runner_args: &bench, &compiler, &compiler_args, perf, cpu
 pub fn runner_write_json(
     fellback: bool,
     bench_json: &String,
     perf_events: &HashMap<String, u64>,
-    runner_args: (&String, &String, &Vec<String>, bool, Option<u16>),
-    metadata: &RunnerMetadata,
+    timestamp: &String,
 ) {
+    let runner_args = get_runner_args();
+    let metadata = get_sys_env_meta();
+
     let bench_json_val: Value = serde_json::from_str(&bench_json).unwrap_or_else(|err| {
         panic!("perflab-Failed to parse bench output, error:\n{err}");
     });
 
     let mut cpu_pin = json!(null);
-    if let Some(cpu_id) = runner_args.4 {
+    if let Some(cpu_id) = runner_args.cpu {
         cpu_pin = json!(cpu_id);
     }
 
     let mut result_schema = json!({
         "meta": {
             "cpu_pin": cpu_pin,
-            "timestamp": metadata.timestamp,
+            "timestamp": timestamp,
             "git_sha": metadata.git_sha.trim_end().replace(['\r', '\n'], ", "),
             "compiler": {
-                "path": runner_args.1,
+                "path": runner_args.compiler,
                 "version": metadata.compiler_ver.trim_end().replace(['\r', '\n'], ", ")
             },
             "uname": metadata.uname.trim_end().replace(['\r', '\n'], ", "),
-            "bench": runner_args.0,
-            "compiler_args": runner_args.2
+            "bench": runner_args.bench,
+            "compiler_args": runner_args.compiler_args
         },
         "bench_output": bench_json_val
     });
@@ -115,7 +112,7 @@ pub fn runner_write_json(
             .insert("perf".to_string(), json!(null));
     }
 
-    let file_path = format!("results/{}_{}.json", metadata.timestamp, runner_args.0);
+    let file_path = format!("results/{}_{}.json", timestamp, runner_args.bench);
     let mut json_file = fs::File::create(&file_path).unwrap_or_else(|err| {
         panic!(
             "perflab-Failed to create file({}), error:\n{err}",

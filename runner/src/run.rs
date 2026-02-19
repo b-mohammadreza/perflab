@@ -1,29 +1,26 @@
-use crate::meta::RunnerMetadata;
+use crate::config::get_runner_args;
 use crate::perf;
 use std::process::{Command, Output};
 
-/// runner_args: &bench, &compiler, &compiler_args
-pub fn runner_run(
-    perf: bool,
-    runner_args: (&String, &String, &Vec<String>),
-    metadata: &RunnerMetadata,
-) -> (bool, String) {
+pub fn runner_run(timestamp: &String) -> (bool, String) {
+    let runner_args = get_runner_args();
+
     let mut output: Output;
     let mut fellback: bool = false;
 
-    match perf {
+    match runner_args.perf {
         false => {
-            output = run_bench(runner_args.0);
+            output = run_bench();
         }
         true => {
-            (fellback, output) = perf::run_perf(runner_args.0, &metadata.timestamp);
+            (fellback, output) = perf::run_perf(timestamp);
         }
     }
 
     if output.status.success() == false {
         let runner_stdrr = String::from_utf8_lossy(&output.stderr);
 
-        if perf == false || fellback == true {
+        if runner_args.perf == false || fellback == true {
             /*
              *  If <perf == true> and also <fellback == true> (already fell back):
              *      at this point, because <output.status> is failed, it means
@@ -35,7 +32,7 @@ pub fn runner_run(
         } else {
             // <perf == true> and <fellback == false> (not yet fell back), falling back...
             println!("perflab-Unable to get perf stat, falling back..., error:\n{runner_stdrr}");
-            output = run_bench(runner_args.0);
+            output = run_bench();
             if output.status.success() == false {
                 panic!("perflab:\n{}", String::from_utf8_lossy(&output.stderr));
             }
@@ -49,10 +46,15 @@ pub fn runner_run(
     )
 }
 
-pub fn run_bench(bench: &String) -> Output {
-    Command::new(format!("out/{}", bench))
+pub fn run_bench() -> Output {
+    let runner_args = get_runner_args();
+
+    Command::new(format!("out/{}", runner_args.bench))
         .output()
         .unwrap_or_else(|e| {
-            panic!("perflab-Failed to execute command(out/{bench}), error:\n{e}");
+            panic!(
+                "perflab-Failed to execute command(out/{}), error:\n{e}",
+                runner_args.bench
+            );
         })
 }
