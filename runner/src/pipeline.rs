@@ -14,13 +14,13 @@ pub fn execute(config: config::Commands) {
         affinity::set_affinity(val);
     }
 
-    meta::metadata_capture();
-
     let result = compile::runner_compile();
 
     if result == 0 {
         let warmup = runner_args.warmup.unwrap_or(1u32);
         run::runner_warmup(warmup);
+
+        meta::metadata_capture();
 
         let reps = runner_args.reps.unwrap_or(5u32);
         let timestamp = meta::get_timestamp();
