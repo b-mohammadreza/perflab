@@ -1,11 +1,10 @@
 use crate::config::get_runner_args;
-use crate::run;
 use std::process::{Command, Output};
 
-pub fn run_perf(timestamp: &String) -> (bool, Output) {
+pub fn run_perf(timestamp: &String) -> Result<Output, std::io::Error> {
     let runner_args = get_runner_args();
 
-    let perf_output = Command::new("perf")
+    Command::new("perf")
         .arg("stat")
         .arg("-x,")
         .arg("-e")
@@ -14,13 +13,5 @@ pub fn run_perf(timestamp: &String) -> (bool, Output) {
         .arg(format!("out/perf_{}_{}.csv", timestamp, runner_args.bench))
         .arg("--")
         .arg(format!("out/{}", runner_args.bench))
-        .output();
-
-    match perf_output {
-        Ok(val) => (false, val),
-        Err(err) => {
-            println!("perflab-Failed to execute command(perf), falling back..., error:\n{err}");
-            (true, run::run_bench())
-        }
-    }
+        .output()
 }

@@ -14,7 +14,7 @@ pub fn runner_compile() -> u32 {
 
     let output = cmd.output().unwrap_or_else(|e| {
         panic!(
-            "perflab-Failed to execute command({}), error:\n{e}",
+            "perflab-compile-Failed to execute command({}), error:\n{e}",
             runner_args.compiler
         );
     });

@@ -19,10 +19,13 @@ pub fn execute(config: config::Commands) {
     let result = compile::runner_compile();
 
     if result == 0 {
+        let warmup = runner_args.warmup.unwrap_or(1u32);
+        run::runner_warmup(warmup);
+
+        let reps = runner_args.reps.unwrap_or(5u32);
         let timestamp = meta::get_timestamp();
+        let run_samples = run::runner_collect_samples(reps, &timestamp);
 
-        let (fellback, bench_jason) = run::runner_run(&timestamp);
-
-        io::finalize_and_write_result(fellback, &timestamp, &bench_jason);
+        io::finalize_and_write_result(&timestamp, &run_samples);
     }
 }

@@ -1,16 +1,10 @@
 use crate::config::get_runner_args;
+use crate::types;
 use chrono::prelude::*;
 use std::process::Command;
 use std::sync::OnceLock;
 
-#[derive(Debug)]
-pub struct RunnerSysEnvMetadata {
-    pub git_sha: String,
-    pub compiler_ver: String,
-    pub uname: String,
-}
-
-static RUNNER_SYS_ENV: OnceLock<RunnerSysEnvMetadata> = OnceLock::new();
+static RUNNER_SYS_ENV: OnceLock<types::RunnerSysEnvMetadata> = OnceLock::new();
 
 pub fn metadata_capture() {
     let runner_args = get_runner_args();
@@ -59,15 +53,15 @@ pub fn metadata_capture() {
     let uname = String::from_utf8_lossy(&uname_output.stdout).to_string();
 
     RUNNER_SYS_ENV
-        .set(RunnerSysEnvMetadata {
-            git_sha,
-            compiler_ver,
-            uname,
+        .set(types::RunnerSysEnvMetadata {
+            git_sha: git_sha.trim_end().replace(['\r', '\n'], ", "),
+            compiler_ver: compiler_ver.trim_end().replace(['\r', '\n'], ", "),
+            uname: uname,
         })
         .expect("perflab-System environment meta-data already initialized!");
 }
 
-pub fn get_sys_env_meta() -> &'static RunnerSysEnvMetadata {
+pub fn get_sys_env_meta() -> &'static types::RunnerSysEnvMetadata {
     RUNNER_SYS_ENV
         .get()
         .expect("perflab-System environment meta-data not initialized!")

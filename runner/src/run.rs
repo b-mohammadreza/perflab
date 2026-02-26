@@ -1,8 +1,35 @@
 use crate::config::get_runner_args;
+use crate::io;
 use crate::perf;
+use crate::types;
 use std::process::{Command, Output};
 
-pub fn runner_run(timestamp: &String) -> (bool, String) {
+pub fn runner_warmup(warmup: u32) {
+    for count in 1..=warmup {
+        let output = run_bench();
+
+        if output.status.success() == false {
+            let runner_stdrr = String::from_utf8_lossy(&output.stderr);
+            panic!("perflab-warmup:\n{runner_stdrr}");
+        }
+
+        println!("warmup - {count}/{warmup}...OK");
+    }
+}
+
+pub fn runner_collect_samples(reps: u32, timestamp: &String) -> types::RunSampleVec {
+    let mut run_samples: types::RunSampleVec = types::RunSampleVec::new();
+
+    for count in 1..=reps {
+        run_samples.push(runner_run(timestamp));
+
+        println!("run - {count}/{reps}...OK");
+    }
+
+    run_samples
+}
+
+fn runner_run(timestamp: &String) -> types::RunSample {
     let runner_args = get_runner_args();
 
     let mut output: Output;
@@ -13,7 +40,11 @@ pub fn runner_run(timestamp: &String) -> (bool, String) {
             output = run_bench();
         }
         true => {
-            (fellback, output) = perf::run_perf(timestamp);
+            output = perf::run_perf(&timestamp).unwrap_or_else(|err| {
+                println!("perflab-Failed to execute command(perf), falling back..., error:\n{err}");
+                fellback = true;
+                run_bench()
+            });
         }
     }
 
@@ -34,16 +65,24 @@ pub fn runner_run(timestamp: &String) -> (bool, String) {
             println!("perflab-Unable to get perf stat, falling back..., error:\n{runner_stdrr}");
             output = run_bench();
             if output.status.success() == false {
-                panic!("perflab:\n{}", String::from_utf8_lossy(&output.stderr));
+                panic!("perflab-run:\n{}", String::from_utf8_lossy(&output.stderr));
             }
             fellback = true;
         }
     }
 
-    (
-        fellback,
-        String::from_utf8_lossy(&output.stdout).trim().to_string(),
-    )
+    let mut perf_json: Option<types::Perf> = None;
+    if runner_args.perf == true && fellback == false {
+        perf_json = Some(io::get_perf_events(&timestamp));
+    }
+
+    types::RunSample {
+        bench_output: serde_json::from_str(String::from_utf8_lossy(&output.stdout).trim())
+            .unwrap_or_else(|err| {
+                panic!("perflab-Failed to parse bench output, error:\n{err}");
+            }),
+        perf: perf_json,
+    }
 }
 
 pub fn run_bench() -> Output {
@@ -53,7 +92,7 @@ pub fn run_bench() -> Output {
         .output()
         .unwrap_or_else(|e| {
             panic!(
-                "perflab-Failed to execute command(out/{}), error:\n{e}",
+                "perflab-run-Failed to execute command(out/{}), error:\n{e}",
                 runner_args.bench
             );
         })

@@ -11,10 +11,16 @@ pub struct CmdLine {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Runs the benchmark. Options: [--cpu <id>] [--perf] --bench <name>, --compiler <name> -- <flags...>
+    /// Runs the benchmark. Options: [--warmup <num>] [--reps <num>] [--cpu <id>] [--perf] --bench <name>, --compiler <name> -- <flags...>
     Run {
+        #[arg(short, long, value_name = "warmup")]
+        warmup: Option<u32>,
+
+        #[arg(short, long, value_parser = clap::value_parser!(u32).range(1..), value_name = "reps")]
+        reps: Option<u32>,
+
         /// logical Linux CPU ID
-        #[arg(long, value_name = "id")]
+        #[arg(short = 'u', long, value_name = "id")]
         cpu: Option<u16>,
 
         /// Collect perf stat counters (best-effort)
@@ -34,6 +40,8 @@ pub enum Commands {
 
 #[derive(Debug)]
 pub struct RunnerArgs {
+    pub warmup: Option<u32>,
+    pub reps: Option<u32>,
     pub cpu: Option<u16>,
     pub perf: bool,
     pub bench: String,
@@ -46,6 +54,8 @@ static RUNNER_CONFIG: OnceLock<RunnerArgs> = OnceLock::new();
 pub fn init_runner_args(args: Commands) {
     match args {
         Commands::Run {
+            warmup,
+            reps,
             cpu,
             perf,
             bench,
@@ -54,6 +64,8 @@ pub fn init_runner_args(args: Commands) {
         } => {
             RUNNER_CONFIG
                 .set(RunnerArgs {
+                    warmup,
+                    reps,
                     cpu,
                     perf,
                     bench,
