@@ -5,7 +5,7 @@ use std::collections::HashMap;
 pub struct RunnerJson<'lifetime> {
     pub meta: Meta<'lifetime>,
     pub samples: &'lifetime RunSampleVec,
-    pub summary: Summary,
+    pub summary: &'lifetime Summary,
 }
 
 #[derive(Serialize)]
@@ -73,3 +73,11 @@ pub struct Perf {
 }
 
 pub type RunSampleVec = Vec<RunSample>;
+
+pub struct BenchPhasesArrs {
+    pub compute_arr: Vec<u64>,
+    pub init_arr: Vec<u64>,
+    pub teardown_arr: Vec<u64>,
+}
+
+pub type PerfArrs = HashMap<String, Vec<u64>>;

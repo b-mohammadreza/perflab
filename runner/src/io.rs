@@ -45,7 +45,11 @@ pub fn get_perf_events(timestamp: &String) -> types::Perf {
     }
 }
 
-pub fn finalize_and_write_result(timestamp: &String, run_samples: &types::RunSampleVec) {
+pub fn finalize_and_write_result(
+    timestamp: &String,
+    run_samples: &types::RunSampleVec,
+    summary: &types::Summary,
+) {
     let runner_args = get_runner_args();
     let sys_env = get_sys_env_meta();
 
@@ -65,14 +69,7 @@ pub fn finalize_and_write_result(timestamp: &String, run_samples: &types::RunSam
             compiler_args: &runner_args.compiler_args,
         },
         samples: run_samples,
-        summary: types::Summary {
-            phases_ns: types::BenchPhasesNs {
-                compute: 0,
-                init: 0,
-                teardown: 0,
-            },
-            perf: None,
-        },
+        summary: summary,
     };
 
     let file_path = format!("results/{}_{}.json", timestamp, runner_args.bench);

@@ -4,6 +4,7 @@ use crate::config;
 use crate::io;
 use crate::meta;
 use crate::run;
+use crate::summary;
 
 pub fn execute(config: config::Commands) {
     config::init_runner_args(config);
@@ -26,6 +27,8 @@ pub fn execute(config: config::Commands) {
         let timestamp = meta::get_timestamp();
         let run_samples = run::runner_collect_samples(reps, &timestamp);
 
-        io::finalize_and_write_result(&timestamp, &run_samples);
+        let summary = summary::compute(&run_samples);
+
+        io::finalize_and_write_result(&timestamp, &run_samples, &summary);
     }
 }

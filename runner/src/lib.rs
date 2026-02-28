@@ -8,4 +8,5 @@ mod compile;
 mod io;
 mod perf;
 mod run;
+mod summary;
 mod types;
