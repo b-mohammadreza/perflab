@@ -1,6 +1,6 @@
 // reduce.cpp defaults (v0)
 // INPUT_SIZE_N                = 33554432     // 32 * 1024 * 1024 elements
-// ITERATIONS                  = 25
+// ITERATIONS                  = 150
 // Input Pattern: a[i]         = (i % 1024)
 // Expected verification value = 17163091968  // N / 1024 = 32,768 _____ 0 + 1 + … + 1023 = 1023*1024/2 = 523,776 _____ 523,776 * 32,768 = 17,163,091,968 
 
@@ -13,7 +13,7 @@ int main([[maybe_unused]] int argc,[[maybe_unused]] char* argv[])
 {
     constexpr uint64_t expected_reduce = 17163091968;
 
-    constexpr uint32_t iter_num        = 25;
+    constexpr uint32_t iter_num        = 150;
     constexpr uint64_t input_size      = ((32 << 10) << 10);
 
     // We need to create an array
