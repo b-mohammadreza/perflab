@@ -56,7 +56,7 @@ pub fn metadata_capture() {
         .set(types::RunnerSysEnvMetadata {
             git_sha: git_sha.trim_end().replace(['\r', '\n'], ", "),
             compiler_ver: compiler_ver.trim_end().replace(['\r', '\n'], ", "),
-            uname: uname,
+            uname: uname.trim_end().to_string(),
         })
         .expect("perflab-System environment meta-data already initialized!");
 }

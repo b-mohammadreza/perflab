@@ -86,3 +86,28 @@ On hybrid systems, pinning to different CPU IDs may change which PMU block repor
 ### Output metadata
 
 When `--cpu` is provided, results include the chosen CPU ID in metadata (e.g., `meta.cpu_pin`), so runs are self-describing.
+
+## Warmup + repetitions (measurement hygiene)
+
+Use warmups to discard cold-start effects, then collect multiple reps and summarize with medians.
+
+### Usage
+```bash
+perflab run --warmup 1 --reps 5 --bench matmul --compiler clang++ -- -O3
+perflab run --perf --warmup 1 --reps 5 --bench matmul --compiler clang++ -- -O3
+```
+
+### Defaults:
+- `--warmup 1`
+- `--reps 5`
+
+
+## Output layout
+The results JSON contains:
+- `meta`: includes `warmup` and `reps` (plus compiler info, git sha, uname, etc.)
+- `samples`: array of per-rep samples (length == `reps`)
+- `summary`: medians of `init/compute/teardown` and (when available) perf events
+
+Perf failure policy:
+- If `--perf` is enabled and perf fails on a given rep, that rep is still recorded, but its `perf` is `null`.
+- `summary.perf` is computed as the median over reps where perf exists. If no reps have perf, `summary.perf` is `null`.
