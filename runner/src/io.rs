@@ -1,10 +1,11 @@
 use crate::config::get_runner_args;
 use crate::meta::get_sys_env_meta;
+use crate::perf;
 use crate::types;
 use serde_json;
-use std::fs;
 use std::{
     collections::HashMap,
+    env, fs,
     io::{Read, Write},
 };
 
@@ -52,9 +53,15 @@ pub fn finalize_and_write_result(
 ) {
     let runner_args = get_runner_args();
     let sys_env = get_sys_env_meta();
+    let mut cmd_line: Vec<String> = Vec::new();
+
+    for argument in env::args_os() {
+        cmd_line.push(argument.to_string_lossy().trim().to_string());
+    }
 
     let runner_json = types::RunnerJson {
         meta: types::Meta {
+            schema_version: 1,
             cpu_pin: runner_args.cpu,
             warmup: runner_args.warmup.unwrap_or(1u32),
             reps: runner_args.reps.unwrap_or(5u32),
@@ -67,6 +74,18 @@ pub fn finalize_and_write_result(
             uname: &sys_env.uname,
             bench: &runner_args.bench,
             compiler_args: &runner_args.compiler_args,
+            command: cmd_line,
+            workdir: &sys_env.cur_dir,
+            perf_events_requested: if runner_args.perf == true {
+                Some(perf::get_perf_requested_events())
+            } else {
+                None
+            },
+            perf_stat_args: if runner_args.perf == true {
+                Some(&perf::get_perf_stat_args(timestamp))
+            } else {
+                None
+            },
         },
         samples: run_samples,
         summary: summary,

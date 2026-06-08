@@ -108,6 +108,6 @@ The results JSON contains:
 - `samples`: array of per-rep samples (length == `reps`)
 - `summary`: medians of `init/compute/teardown` and (when available) perf events
 
-Perf failure policy:
-- If `--perf` is enabled and perf fails on a given rep, that rep is still recorded, but its `perf` is `null`.
+Not applicable policy:
+- For stable top-level fields we prefer explicit `null` over omitting keys when a value is not applicable (e.g., per-sample `perf` may be `null`). For dynamic key/value maps (e.g., `perf.events`, benchmark-specific `params/check`), keys are only present when observed—missing keys are not synthesized with sentinel values.
 - `summary.perf` is computed as the median over reps where perf exists. If no reps have perf, `summary.perf` is `null`.

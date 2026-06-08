@@ -22,6 +22,7 @@ pub struct Summary {
 
 #[derive(Serialize)]
 pub struct Meta<'lifetime> {
+    pub schema_version: u32,
     pub cpu_pin: Option<u16>,
     pub warmup: u32,
     pub reps: u32,
@@ -31,6 +32,10 @@ pub struct Meta<'lifetime> {
     pub uname: &'lifetime String,
     pub bench: &'lifetime String,
     pub compiler_args: &'lifetime Vec<String>,
+    pub command: Vec<String>,
+    pub workdir: &'lifetime String,
+    pub perf_events_requested: Option<&'lifetime PerfRequestedEvents>,
+    pub perf_stat_args: Option<&'lifetime PerfStatArgs>,
 }
 
 #[derive(Debug)]
@@ -38,6 +43,7 @@ pub struct RunnerSysEnvMetadata {
     pub git_sha: String,
     pub compiler_ver: String,
     pub uname: String,
+    pub cur_dir: String,
 }
 
 #[derive(Serialize)]
@@ -81,3 +87,7 @@ pub struct BenchPhasesArrs {
 }
 
 pub type PerfArrs = HashMap<String, Vec<u64>>;
+
+pub type PerfRequestedEvents = Vec<String>;
+
+pub type PerfStatArgs = Vec<String>;

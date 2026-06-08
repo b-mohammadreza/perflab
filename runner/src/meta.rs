@@ -1,6 +1,7 @@
 use crate::config::get_runner_args;
 use crate::types;
 use chrono::prelude::*;
+use std::env;
 use std::process::Command;
 use std::sync::OnceLock;
 
@@ -52,11 +53,19 @@ pub fn metadata_capture() {
     }
     let uname = String::from_utf8_lossy(&uname_output.stdout).to_string();
 
+    let cur_dir = env::current_dir()
+        .unwrap_or_else(|err| panic!("perflab-Os env, unable to get current directory! Err: {err}"))
+        .into_os_string()
+        .to_string_lossy()
+        .trim()
+        .to_string();
+
     RUNNER_SYS_ENV
         .set(types::RunnerSysEnvMetadata {
-            git_sha: git_sha.trim_end().replace(['\r', '\n'], ", "),
+            git_sha: git_sha.trim_end().to_string(),
             compiler_ver: compiler_ver.trim_end().replace(['\r', '\n'], ", "),
             uname: uname.trim_end().to_string(),
+            cur_dir: cur_dir,
         })
         .expect("perflab-System environment meta-data already initialized!");
 }
