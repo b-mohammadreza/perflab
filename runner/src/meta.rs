@@ -23,21 +23,16 @@ pub fn metadata_capture() {
     }
     let git_sha = String::from_utf8_lossy(&git_sha_output.stdout).to_string();
 
-    let compiler_ver_output = Command::new(format!("{}", runner_args.compiler))
+    let compiler = runner_args.compiler.as_str();
+    let compiler_ver_output = Command::new(compiler)
         .arg("--version")
         .output()
         .unwrap_or_else(|e| {
-            panic!(
-                "perflab-Failed to execute command({}), error:\n{e}",
-                runner_args.compiler
-            );
+            panic!("perflab-Failed to execute command({compiler}), error:\n{e}");
         });
     if compiler_ver_output.status.success() == false {
         let err_str = String::from_utf8_lossy(&compiler_ver_output.stderr);
-        panic!(
-            "perflab-Command({}) execution failed, error:\n{err_str}",
-            runner_args.compiler
-        );
+        panic!("perflab-Command({compiler}) execution failed, error:\n{err_str}");
     }
     let compiler_ver = String::from_utf8_lossy(&compiler_ver_output.stdout).to_string();
 

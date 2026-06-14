@@ -44,12 +44,12 @@ fn get_phases_median(samples: &types::RunSampleVec) -> types::BenchPhasesNs {
     }
 }
 
-fn get_perf_median(samples: &types::RunSampleVec) -> Option<types::Perf> {
+fn get_perf_median(samples: &types::RunSampleVec) -> Option<types::PerfEvents> {
     let mut perf_arrs: PerfArrs = HashMap::new();
 
     for sample in samples {
         if let Some(perf_elem) = &sample.perf {
-            for event in &perf_elem.events {
+            for event in &perf_elem.perf_events.events {
                 perf_arrs
                     .entry(event.0.to_string())
                     .and_modify(|arr| {
@@ -63,7 +63,7 @@ fn get_perf_median(samples: &types::RunSampleVec) -> Option<types::Perf> {
     if perf_arrs.is_empty() == true {
         None
     } else {
-        let mut perf = types::Perf {
+        let mut perf = types::PerfEvents {
             events: HashMap::new(),
         };
 

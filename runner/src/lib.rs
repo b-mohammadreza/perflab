@@ -6,6 +6,7 @@ pub use pipeline::execute;
 mod affinity;
 mod compile;
 mod io;
+mod paths;
 mod perf;
 mod run;
 mod summary;

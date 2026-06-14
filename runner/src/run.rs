@@ -1,5 +1,6 @@
 use crate::config::get_runner_args;
 use crate::io;
+use crate::paths;
 use crate::perf;
 use crate::types;
 use std::process::{Command, Output};
@@ -20,16 +21,16 @@ pub fn runner_warmup(warmup: u32) {
 pub fn runner_collect_samples(reps: u32, timestamp: &String) -> types::RunSampleVec {
     let mut run_samples: types::RunSampleVec = types::RunSampleVec::new();
 
-    for count in 1..=reps {
-        run_samples.push(runner_run(timestamp));
+    for rep in 1..=reps {
+        run_samples.push(runner_run(timestamp, rep));
 
-        println!("run - {count}/{reps}...OK");
+        println!("run - {rep}/{reps}...OK");
     }
 
     run_samples
 }
 
-fn runner_run(timestamp: &String) -> types::RunSample {
+fn runner_run(timestamp: &String, rep: u32) -> types::RunSample {
     let runner_args = get_runner_args();
 
     let mut output: Output;
@@ -40,7 +41,7 @@ fn runner_run(timestamp: &String) -> types::RunSample {
             output = run_bench();
         }
         true => {
-            output = perf::run_perf(&timestamp).unwrap_or_else(|err| {
+            output = perf::run_perf(&timestamp, rep).unwrap_or_else(|err| {
                 println!("perflab-Failed to execute command(perf), falling back..., error:\n{err}");
                 fellback = true;
                 run_bench()
@@ -73,7 +74,7 @@ fn runner_run(timestamp: &String) -> types::RunSample {
 
     let mut perf_json: Option<types::Perf> = None;
     if runner_args.perf == true && fellback == false {
-        perf_json = Some(io::get_perf_events(&timestamp));
+        perf_json = Some(io::get_perf_events(&timestamp, rep));
     }
 
     types::RunSample {
@@ -86,14 +87,11 @@ fn runner_run(timestamp: &String) -> types::RunSample {
 }
 
 pub fn run_bench() -> Output {
-    let runner_args = get_runner_args();
+    let bench_bin_path = paths::get_bench_bin_path();
 
-    Command::new(format!("out/{}", runner_args.bench))
+    Command::new(bench_bin_path.as_str())
         .output()
         .unwrap_or_else(|e| {
-            panic!(
-                "perflab-run-Failed to execute command(out/{}), error:\n{e}",
-                runner_args.bench
-            );
+            panic!("perflab-run-Failed to execute command({bench_bin_path}), error:\n{e}");
         })
 }

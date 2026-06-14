@@ -1,5 +1,6 @@
 use crate::config::get_runner_args;
 use crate::meta::get_sys_env_meta;
+use crate::paths;
 use crate::perf;
 use crate::types;
 use serde_json;
@@ -9,25 +10,18 @@ use std::{
     io::{Read, Write},
 };
 
-pub fn get_perf_events(timestamp: &String) -> types::Perf {
-    let runner_args = get_runner_args();
-
+pub fn get_perf_events(timestamp: &String, rep: u32) -> types::Perf {
+    let perf_stat_path = paths::get_perf_stat_path(timestamp, rep);
     let mut csv_file_text: String = String::new();
     let mut perf_events: HashMap<String, u64> = HashMap::new();
 
-    fs::File::open(format!("out/perf_{}_{}.csv", timestamp, runner_args.bench))
+    fs::File::open(perf_stat_path.as_str())
         .unwrap_or_else(|err| {
-            panic!(
-                "perflab-Cannot open file(out/perf_{}_{}.csv), error:\n{err}",
-                timestamp, runner_args.bench
-            );
+            panic!("perflab-Cannot open file({perf_stat_path}), error:\n{err}");
         })
         .read_to_string(&mut csv_file_text)
         .unwrap_or_else(|err| {
-            panic!(
-                "perflab-Failed reading file(out/perf_{}_{}.csv), error:\n{err}",
-                timestamp, runner_args.bench
-            );
+            panic!("perflab-Failed reading file({perf_stat_path}), error:\n{err}");
         });
 
     for line in csv_file_text.lines() {
@@ -42,7 +36,11 @@ pub fn get_perf_events(timestamp: &String) -> types::Perf {
     }
 
     types::Perf {
-        events: perf_events,
+        csv_path: perf_stat_path,
+        perf_stat_args: perf::get_perf_stat_args(timestamp, rep),
+        perf_events: types::PerfEvents {
+            events: perf_events,
+        },
     }
 }
 
@@ -81,8 +79,8 @@ pub fn finalize_and_write_result(
             } else {
                 None
             },
-            perf_stat_args: if runner_args.perf == true {
-                Some(&perf::get_perf_stat_args(timestamp))
+            perf_stat_base_args: if runner_args.perf == true {
+                Some(&perf::get_perf_stat_base_args())
             } else {
                 None
             },
@@ -91,7 +89,7 @@ pub fn finalize_and_write_result(
         summary: summary,
     };
 
-    let file_path = format!("results/{}_{}.json", timestamp, runner_args.bench);
+    let file_path = paths::get_result_json_path(timestamp);
     let mut json_file = fs::File::create(&file_path).unwrap_or_else(|err| {
         panic!(
             "perflab-Failed to create file({}), error:\n{err}",

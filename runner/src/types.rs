@@ -17,7 +17,7 @@ pub struct RunSample {
 #[derive(Serialize)]
 pub struct Summary {
     pub phases_ns: BenchPhasesNs,
-    pub perf: Option<Perf>,
+    pub perf: Option<PerfEvents>,
 }
 
 #[derive(Serialize)]
@@ -35,7 +35,7 @@ pub struct Meta<'lifetime> {
     pub command: Vec<String>,
     pub workdir: &'lifetime String,
     pub perf_events_requested: Option<&'lifetime PerfRequestedEvents>,
-    pub perf_stat_args: Option<&'lifetime PerfStatArgs>,
+    pub perf_stat_base_args: Option<&'lifetime PerfStatArgs>,
 }
 
 #[derive(Debug)]
@@ -74,8 +74,17 @@ pub struct BenchPhasesNs {
 }
 
 #[derive(Serialize)]
-pub struct Perf {
+pub struct PerfEvents {
     pub events: HashMap<String, u64>,
+}
+
+#[derive(Serialize)]
+pub struct Perf {
+    pub csv_path: String,
+    pub perf_stat_args: PerfStatArgs,
+
+    #[serde(flatten)]
+    pub perf_events: PerfEvents,
 }
 
 pub type RunSampleVec = Vec<RunSample>;
