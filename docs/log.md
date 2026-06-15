@@ -16,3 +16,9 @@
 - runner: add `--warmup <n>` (default 1) and `--reps <n>` (default 5); collect `samples[]` and compute `summary` (median).
 - bench: increase `reduce` default iterations so compute dominates init; checksum unchanged.
 - metadata: trim trailing newline from `uname`.
+
+## 2026-06-14
+- results: add per-rep perf CSV artifact linkage. Each successful perf sample now records its own `csv_path` and `perf_stat_args`, making raw perf artifacts traceable back to the exact repetition that produced them.
+- test: add `scripts/smoke.py` as a v0.1 measurement-hygiene smoke check. It runs `matmul` and `reduce` with CPU pinning, perf, warmup, and repetitions, then validates the core results JSON contract.
+- docs: document results schema versioning, `samples` vs `summary`, per-rep perf artifacts, and the explicit `null` policy for known optional fields.
+- milestone: this completes the traceable stable-measurements layer on top of CPU pinning, warmup/reps, median summaries, and reduce compute-dominance cleanup.

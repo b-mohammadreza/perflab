@@ -13,7 +13,6 @@ From repo root:
 - `report/` JSON → markdown/plots (later)
 
 ## Benchmarks (Meson + Ninja + clang++)
-
 Benchmarks live under `bench/`. You can build and run them directly (developer sanity check) without the PerfLab runner.
 
 ### Setup (one-time)
@@ -50,7 +49,6 @@ Or run binaries directly:
 ```
 
 ## Perf counters (Linux perf stat)
-
 PerfLab can optionally collect CPU performance counters via Linux `perf stat`. When enabled, PerfLab runs the benchmark under `perf stat` and stores counters under `perf.events` in the results JSON.
 
 Notes:
@@ -63,7 +61,6 @@ cargo run -- run --perf --bench reduce --compiler clang++ -- -O3
 ```
 
 ## CPU pinning (determinism on hybrid CPUs)
-
 PerfLab can pin the entire run (compile + perf collection + benchmark execution) to a single logical CPU to reduce noise and make results repeatable—especially on hybrid Intel systems (P-cores + E-cores).
 
 ### Usage
@@ -75,7 +72,6 @@ perflab run --cpu <cpu_id> --perf --bench matmul --compiler clang++ -- -O3
 `<cpu_id>` is a Linux logical CPU ID (the same numbering used by taskset -c).
 
 ### How to pick a CPU ID
-
 List available logical CPUs:
 ```bash
 lscpu -e=CPU,CORE,SOCKET,MAXMHZ
@@ -84,11 +80,9 @@ lscpu -e=CPU,CORE,SOCKET,MAXMHZ
 On hybrid systems, pinning to different CPU IDs may change which PMU block reports non-zero counters (e.g., `cpu_core/*` vs `cpu_atom/*`). For consistent comparisons, reuse the same `--cpu` value across runs.
 
 ### Output metadata
-
 When `--cpu` is provided, results include the chosen CPU ID in metadata (e.g., `meta.cpu_pin`), so runs are self-describing.
 
 ## Warmup + repetitions (measurement hygiene)
-
 Use warmups to discard cold-start effects, then collect multiple reps and summarize with medians.
 
 ### Usage
@@ -111,3 +105,56 @@ The results JSON contains:
 Not applicable policy:
 - For stable top-level fields we prefer explicit `null` over omitting keys when a value is not applicable (e.g., per-sample `perf` may be `null`). For dynamic key/value maps (e.g., `perf.events`, benchmark-specific `params/check`), keys are only present when observed—missing keys are not synthesized with sentinel values.
 - `summary.perf` is computed as the median over reps where perf exists. If no reps have perf, `summary.perf` is `null`.
+
+## Output layout
+PerfLab writes one results JSON file per run under `results/`.
+
+The top-level layout is:
+
+- `meta`: run metadata
+- `samples`: raw per-repetition measurements
+- `summary`: median summary derived from `samples`
+
+### `meta`
+`meta` contains information needed to understand and reproduce the run:
+
+- `schema_version`: results schema version. Current version is `1`.
+- `command`: argv used to launch the PerfLab run.
+- `workdir`: working directory where the run was launched.
+- `bench`: benchmark name.
+- `compiler`: compiler path and version.
+- `compiler_args`: compiler flags passed after `--`.
+- `git_sha`: current repository commit.
+- `uname`: host kernel/system string.
+- `cpu_pin`: logical CPU ID when `--cpu` is used, otherwise `null`.
+- `warmup`: number of warmup runs.
+- `reps`: number of measured repetitions.
+- `perf_events_requested`: requested perf events when `--perf` is used, otherwise `null`.
+
+### `samples` vs `summary`
+`samples` contains one entry per measured repetition. Its length should equal `meta.reps`.
+
+Each sample contains:
+
+- `bench_output`: benchmark JSON output for that repetition.
+- `perf`: perf data for that repetition, or `null` if perf was unavailable.
+
+When perf succeeds, `perf` contains:
+
+- `csv_path`: path to the per-rep perf CSV artifact under `out/`.
+- `perf_stat_args`: perf stat arguments used for that repetition.
+- `events`: parsed perf event counters.
+
+`summary` contains medians derived from `samples`:
+
+- `summary.phases_ns`: median `init`, `compute`, and `teardown` phase timings.
+- `summary.perf`: median perf events over samples where perf exists. If no samples have perf data, `summary.perf` is `null`.
+
+### Null and dynamic-map policy
+For stable known fields, PerfLab prefers explicit `null` over omitting keys when a value is not applicable. Examples: `meta.cpu_pin`, `meta.perf_events_requested`, per-sample `perf`, and `summary.perf`.
+
+For dynamic key/value maps, keys are only present when observed. PerfLab does not synthesize missing keys with `0`, `"none"`, or other sentinel values. This applies to:
+
+- `perf.events`
+- `bench_output.params`
+- `bench_output.check`
