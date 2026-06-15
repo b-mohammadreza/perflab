@@ -95,17 +95,6 @@ perflab run --perf --warmup 1 --reps 5 --bench matmul --compiler clang++ -- -O3
 - `--warmup 1`
 - `--reps 5`
 
-
-## Output layout
-The results JSON contains:
-- `meta`: includes `warmup` and `reps` (plus compiler info, git sha, uname, etc.)
-- `samples`: array of per-rep samples (length == `reps`)
-- `summary`: medians of `init/compute/teardown` and (when available) perf events
-
-Not applicable policy:
-- For stable top-level fields we prefer explicit `null` over omitting keys when a value is not applicable (e.g., per-sample `perf` may be `null`). For dynamic key/value maps (e.g., `perf.events`, benchmark-specific `params/check`), keys are only present when observed—missing keys are not synthesized with sentinel values.
-- `summary.perf` is computed as the median over reps where perf exists. If no reps have perf, `summary.perf` is `null`.
-
 ## Output layout
 PerfLab writes one results JSON file per run under `results/`.
 
