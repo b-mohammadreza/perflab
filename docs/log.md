@@ -22,3 +22,10 @@
 - test: add `scripts/smoke.py` as a v0.1 measurement-hygiene smoke check. It runs `matmul` and `reduce` with CPU pinning, perf, warmup, and repetitions, then validates the core results JSON contract.
 - docs: document results schema versioning, `samples` vs `summary`, per-rep perf artifacts, and the explicit `null` policy for known optional fields.
 - milestone: this completes the traceable stable-measurements layer on top of CPU pinning, warmup/reps, median summaries, and reduce compute-dominance cleanup.
+
+## 2026-06-22
+- compare: define v0 comparison contract in `schema/compare-v0.md`.
+- v0 comparison compares two result JSON files: baseline vs candidate.
+- hard requirements: matching `meta.schema_version` and `meta.bench`, plus required `summary.phases_ns` fields.
+- phase deltas use `candidate - baseline`; positive timing delta means candidate is slower.
+- perf comparison uses only common `summary.perf.events` keys and never treats missing events as zero.
