@@ -1,13 +1,13 @@
-mod config;
-pub use config::CmdLine;
-mod meta;
-mod pipeline;
-pub use pipeline::execute;
 mod affinity;
+pub mod compare;
 mod compile;
+pub mod config;
 mod io;
+mod meta;
 mod paths;
 mod perf;
+pub mod pipeline;
+mod results;
 mod run;
 mod summary;
 mod types;

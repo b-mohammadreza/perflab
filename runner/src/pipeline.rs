@@ -3,12 +3,11 @@ use crate::compile;
 use crate::config;
 use crate::io;
 use crate::meta;
+use crate::results;
 use crate::run;
 use crate::summary;
 
-pub fn execute(config: config::Commands) {
-    config::init_runner_args(config);
-
+pub fn execute() {
     let runner_args = config::get_runner_args();
 
     if let Some(val) = runner_args.cpu {
@@ -29,6 +28,7 @@ pub fn execute(config: config::Commands) {
 
         let summary = summary::compute(&run_samples);
 
-        io::finalize_and_write_result(&timestamp, &run_samples, &summary);
+        let result_schem_pretty = results::create_result_obj(&timestamp, &run_samples, &summary);
+        io::write_result(&timestamp, &result_schem_pretty);
     }
 }

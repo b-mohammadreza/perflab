@@ -1,8 +1,37 @@
 use clap::Parser;
-use perflab::CmdLine;
+use perflab::compare;
+use perflab::config;
+use perflab::pipeline;
 
 fn main() {
-    let cl = CmdLine::parse();
+    let cl = config::CmdLine::parse();
 
-    perflab::execute(cl.command);
+    dispach_cmd(cl.command);
+}
+
+fn dispach_cmd(args: config::Commands) {
+    match args {
+        config::Commands::Run {
+            warmup,
+            reps,
+            cpu,
+            perf,
+            bench,
+            compiler,
+            compiler_args,
+        } => {
+            config::set_runner_args(warmup, reps, cpu, perf, bench, compiler, compiler_args);
+
+            pipeline::execute();
+        }
+
+        config::Commands::Compare {
+            baseline,
+            candidate,
+        } => {
+            config::set_cmp_args(baseline, candidate);
+
+            compare::execute();
+        }
+    }
 }

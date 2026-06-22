@@ -1,6 +1,8 @@
+use crate::io;
 use crate::paths;
 use crate::types;
 use std::{
+    collections::HashMap,
     process::{Command, Output},
     sync::OnceLock,
 };
@@ -28,7 +30,31 @@ pub fn get_perf_stat_base_args() -> types::PerfStatArgs {
     perf_stat_base_args
 }
 
-pub fn get_perf_stat_args(timestamp: &String, rep: u32) -> types::PerfStatArgs {
+pub fn get_perf_events(timestamp: &String, rep: u32) -> types::Perf {
+    let csv_file_text = io::read_perf_file(timestamp, rep);
+    let mut perf_events: HashMap<String, u64> = HashMap::new();
+
+    for line in csv_file_text.lines() {
+        let fields: Vec<&str> = line.split(',').collect();
+
+        let stat = match fields[0].trim().replace(',', "").parse() {
+            Ok(val) => val,
+            Err(_) => continue,
+        };
+
+        perf_events.insert(fields[2].trim().to_string(), stat);
+    }
+
+    types::Perf {
+        csv_path: paths::get_perf_stat_path(timestamp, rep),
+        perf_stat_args: get_perf_stat_args(timestamp, rep),
+        perf_events: types::PerfEvents {
+            events: perf_events,
+        },
+    }
+}
+
+fn get_perf_stat_args(timestamp: &String, rep: u32) -> types::PerfStatArgs {
     let mut perf_stat_args: types::PerfStatArgs = get_perf_stat_base_args();
 
     perf_stat_args.push("-o".to_string());

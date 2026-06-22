@@ -4,7 +4,7 @@ use std::process::Command;
 
 pub fn runner_compile() -> u32 {
     let runner_args = get_runner_args();
-    let compiler = runner_args.compiler.as_str();
+    let compiler = &runner_args.compiler.to_string_lossy().trim().to_string();
 
     let mut cmd = Command::new(compiler);
     for compiler_arg in runner_args.compiler_args.iter() {

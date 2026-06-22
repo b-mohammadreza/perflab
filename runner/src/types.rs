@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 #[derive(Serialize)]
 pub struct RunnerJson<'lifetime> {
@@ -100,3 +100,20 @@ pub type PerfArrs = HashMap<String, Vec<u64>>;
 pub type PerfRequestedEvents = Vec<String>;
 
 pub type PerfStatArgs = Vec<String>;
+
+#[derive(Debug)]
+pub struct RunnerArgs {
+    pub warmup: Option<u32>,
+    pub reps: Option<u32>,
+    pub cpu: Option<u16>,
+    pub perf: bool,
+    pub bench: String,
+    pub compiler: PathBuf,
+    pub compiler_args: Vec<String>,
+}
+
+#[derive(Debug)]
+pub struct CompareArgs {
+    pub baseline: PathBuf,
+    pub candidate: PathBuf,
+}

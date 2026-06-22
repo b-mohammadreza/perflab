@@ -1,5 +1,4 @@
 use crate::config::get_runner_args;
-use crate::io;
 use crate::paths;
 use crate::perf;
 use crate::types;
@@ -74,7 +73,7 @@ fn runner_run(timestamp: &String, rep: u32) -> types::RunSample {
 
     let mut perf_json: Option<types::Perf> = None;
     if runner_args.perf == true && fellback == false {
-        perf_json = Some(io::get_perf_events(&timestamp, rep));
+        perf_json = Some(perf::get_perf_events(&timestamp, rep));
     }
 
     types::RunSample {
