@@ -3,6 +3,7 @@ use crate::compile;
 use crate::config;
 use crate::io;
 use crate::meta;
+use crate::paths;
 use crate::results;
 use crate::run;
 use crate::summary;
@@ -29,6 +30,9 @@ pub fn execute() {
         let summary = summary::compute(&run_samples);
 
         let result_schem_pretty = results::create_result_obj(&timestamp, &run_samples, &summary);
-        io::write_result(&timestamp, &result_schem_pretty);
+        io::write_result(
+            &paths::get_result_json_path(&timestamp),
+            &result_schem_pretty,
+        );
     }
 }

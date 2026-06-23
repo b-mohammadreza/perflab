@@ -4,10 +4,7 @@ use crate::types;
 use std::{
     collections::HashMap,
     process::{Command, Output},
-    sync::OnceLock,
 };
-
-static PERF_EVENTS_REQUESTED: OnceLock<types::PerfRequestedEvents> = OnceLock::new();
 
 pub fn run_perf(timestamp: &String, rep: u32) -> Result<Output, std::io::Error> {
     Command::new("perf")
@@ -15,8 +12,8 @@ pub fn run_perf(timestamp: &String, rep: u32) -> Result<Output, std::io::Error> 
         .output()
 }
 
-pub fn get_perf_requested_events() -> &'static types::PerfRequestedEvents {
-    PERF_EVENTS_REQUESTED.get_or_init(|| vec!["cycles:u".to_string(), "instructions:u".to_string()])
+pub fn get_perf_requested_events() -> types::PerfRequestedEvents {
+    vec!["cycles:u".to_string(), "instructions:u".to_string()]
 }
 
 pub fn get_perf_stat_base_args() -> types::PerfStatArgs {
@@ -31,7 +28,7 @@ pub fn get_perf_stat_base_args() -> types::PerfStatArgs {
 }
 
 pub fn get_perf_events(timestamp: &String, rep: u32) -> types::Perf {
-    let csv_file_text = io::read_perf_file(timestamp, rep);
+    let csv_file_text = io::read_txt_file(&paths::get_perf_stat_path(timestamp, rep));
     let mut perf_events: HashMap<String, u64> = HashMap::new();
 
     for line in csv_file_text.lines() {

@@ -24,30 +24,30 @@ pub fn create_result_obj(
             cpu_pin: runner_args.cpu,
             warmup: runner_args.warmup.unwrap_or(1u32),
             reps: runner_args.reps.unwrap_or(5u32),
-            timestamp: timestamp,
-            git_sha: &sys_env.git_sha,
+            timestamp: timestamp.clone(),     // creates a copy
+            git_sha: sys_env.git_sha.clone(), // creates a copy
             compiler: types::MetaCompiler {
-                path: &runner_args.compiler.to_string_lossy().trim().to_string(),
-                version: &sys_env.compiler_ver,
+                path: runner_args.compiler.to_string_lossy().trim().to_string(), // creates a copy
+                version: sys_env.compiler_ver.clone(),                           // creates a copy
             },
-            uname: &sys_env.uname,
-            bench: &runner_args.bench,
-            compiler_args: &runner_args.compiler_args,
+            uname: sys_env.uname.clone(),     // creates a copy
+            bench: runner_args.bench.clone(), // creates a copy
+            compiler_args: runner_args.compiler_args.clone(), // creates a copy
             command: cmd_line,
-            workdir: &sys_env.cur_dir,
+            workdir: sys_env.cur_dir.clone(), // creates a copy
             perf_events_requested: if runner_args.perf == true {
                 Some(perf::get_perf_requested_events())
             } else {
                 None
             },
             perf_stat_base_args: if runner_args.perf == true {
-                Some(&perf::get_perf_stat_base_args())
+                Some(perf::get_perf_stat_base_args())
             } else {
                 None
             },
         },
-        samples: run_samples,
-        summary: summary,
+        samples: run_samples.clone(), // creates a copy
+        summary: summary.clone(),     // creates a copy
     };
 
     serde_json::to_string_pretty(&runner_json).unwrap_or_else(|err| {
