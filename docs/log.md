@@ -29,3 +29,4 @@
 - hard requirements: matching `meta.schema_version` and `meta.bench`, plus required `summary.phases_ns` fields.
 - phase deltas use `candidate - baseline`; positive timing delta means candidate is slower.
 - perf comparison uses only common `summary.perf.events` keys and never treats missing events as zero.
+- known issue: file I/O errors still panic through shared `io` helpers; tracked separately for error-handling cleanup.
