@@ -14,12 +14,14 @@ pub fn execute() {
 
     if checks_required(&baseline_obj, &candidate_obj) == true {
         checks_good_to_have(&baseline_obj, &candidate_obj);
-        print_cmp_header(
-            &baseline_path,
-            &candidate_path,
-            baseline_obj.meta.bench,
-            baseline_obj.meta.schema_version,
-        );
+
+        let bench = baseline_obj.meta.bench.clone();
+        let schm_ver = baseline_obj.meta.schema_version.clone();
+        print_cmp_header(&baseline_path, &candidate_path, bench, schm_ver);
+
+        checks_summary_phases(&baseline_obj, &candidate_obj);
+
+        checks_summary_perf();
     }
 }
 
@@ -129,7 +131,73 @@ fn print_cmp_header(baseline_path: &String, candidate_path: &String, bench: Stri
     println!("\tcandidate: {candidate_path}");
     println!("\tbench: {bench}");
     println!("\tschema: {schm_ver}");
-    println!("\n");
-    println!("\tPhase comparison: TODO");
-    println!("\tPerf comparison: TODO");
+    println!("");
+}
+
+fn checks_summary_phases(baseline: &types::RunnerJson, candidate: &types::RunnerJson) {
+    println!("Phase comparison:");
+    println!(
+        "\t{:<20}{:<20}{:<20}{:<20}{:<20}",
+        "phase", "baseline(ns)", "candidate(ns)", "delta(ns)", "delta(%)"
+    );
+    println!(
+        "\t{:<20}{:<20}{:<20}{:<20}{:<20}",
+        "init",
+        baseline.summary.phases_ns.init,
+        candidate.summary.phases_ns.init,
+        get_abs_delta(
+            baseline.summary.phases_ns.init,
+            candidate.summary.phases_ns.init
+        ),
+        get_percent_delta(
+            baseline.summary.phases_ns.init,
+            candidate.summary.phases_ns.init
+        )
+    );
+    println!(
+        "\t{:<20}{:<20}{:<20}{:<20}{:<20}",
+        "compute",
+        baseline.summary.phases_ns.compute,
+        candidate.summary.phases_ns.compute,
+        get_abs_delta(
+            baseline.summary.phases_ns.compute,
+            candidate.summary.phases_ns.compute
+        ),
+        get_percent_delta(
+            baseline.summary.phases_ns.compute,
+            candidate.summary.phases_ns.compute
+        )
+    );
+    println!(
+        "\t{:<20}{:<20}{:<20}{:<20}{:<20}",
+        "teardown",
+        baseline.summary.phases_ns.teardown,
+        candidate.summary.phases_ns.teardown,
+        get_abs_delta(
+            baseline.summary.phases_ns.teardown,
+            candidate.summary.phases_ns.teardown
+        ),
+        get_percent_delta(
+            baseline.summary.phases_ns.teardown,
+            candidate.summary.phases_ns.teardown
+        )
+    );
+}
+
+fn get_abs_delta(baseline_phase: u64, candidate_phase: u64) -> String {
+    format!("{:+}", candidate_phase as i64 - baseline_phase as i64)
+}
+
+fn get_percent_delta(baseline_phase: u64, candidate_phase: u64) -> String {
+    match baseline_phase {
+        0 => "N/A".to_string(),
+        _ => format!(
+            "{:+.2}%",
+            ((candidate_phase as f64 - baseline_phase as f64) / baseline_phase as f64 * 100 as f64)
+        ),
+    }
+}
+
+fn checks_summary_perf() {
+    println!("Perf comparison: TODO");
 }
