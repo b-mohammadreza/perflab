@@ -117,3 +117,12 @@ pub struct CompareArgs {
     pub baseline: PathBuf,
     pub candidate: PathBuf,
 }
+
+#[derive(Debug)]
+pub struct CmpPerfEvent {
+    pub event_name: String,
+    pub baseline: u64,
+    pub candidate: u64,
+}
+
+pub type CmpPerfEvents = Vec<CmpPerfEvent>;
