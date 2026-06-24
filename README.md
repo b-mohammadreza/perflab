@@ -147,3 +147,43 @@ For dynamic key/value maps, keys are only present when observed. PerfLab does no
 - `perf.events`
 - `bench_output.params`
 - `bench_output.check`
+
+## Comparing result files
+PerfLab can compare two completed result JSON files:
+
+```bash
+perflab compare <baseline.json> <candidate.json>
+```
+
+During development:
+
+```bash
+cargo run -- compare results/<baseline>.json results/<candidate>.json
+```
+
+Comparison direction is:
+
+```text
+delta = candidate - baseline
+```
+
+For timing values, positive delta means the candidate is slower and negative delta means the candidate is faster.
+
+PerfLab compare v0 checks that both files have the same `meta.schema_version` and `meta.bench`. It then compares median values from `summary`.
+
+Compared fields:
+
+* `summary.phases_ns.init`
+* `summary.phases_ns.compute`
+* `summary.phases_ns.teardown`
+* common keys in `summary.perf.events`, when perf data exists in both files
+
+Skipped fields:
+
+* perf comparison is skipped if one or both files have `summary.perf: null`
+* perf event keys are compared only when present in both files
+* missing perf event keys are not treated as zero
+
+Metadata differences such as compiler version, git sha, uname, CPU pinning, reps, or requested perf events may produce warnings but do not stop comparison.
+
+Compare v0 uses existing median summaries only. It does not yet compute statistical confidence, outlier analysis, regression thresholds, or pass/fail decisions.

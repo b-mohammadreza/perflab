@@ -30,3 +30,10 @@
 - phase deltas use `candidate - baseline`; positive timing delta means candidate is slower.
 - perf comparison uses only common `summary.perf.events` keys and never treats missing events as zero.
 - known issue: file I/O errors still panic through shared `io` helpers; tracked separately for error-handling cleanup.
+
+## 2026-06-23
+* compare: add `perflab compare <baseline> <candidate>` for v0 two-file result comparison.
+* compare: validate matching `meta.schema_version` and `meta.bench`; warn on selected metadata differences.
+* compare: print phase deltas for `init`, `compute`, and `teardown` using `summary.phases_ns`.
+* compare: print perf event deltas for common `summary.perf.events` keys; skip perf comparison cleanly when either result has `summary.perf: null`.
+* docs: document comparison usage, compared fields, skipped fields, and the current limitation that compare v0 uses medians only, not statistical confidence.
