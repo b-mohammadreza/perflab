@@ -68,66 +68,77 @@ fn verify_good_to_have(baseline: &types::RunnerJson, candidate: &types::RunnerJs
     if baseline.meta.compiler.path != candidate.meta.compiler.path {
         println!(
             "perflab-compare-warning, compiler.path differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            baseline.meta.compiler.path, candidate.meta.compiler.path
+            format_warning_value(&baseline.meta.compiler.path),
+            format_warning_value(&candidate.meta.compiler.path)
         );
     }
     if baseline.meta.compiler.version != candidate.meta.compiler.version {
         println!(
             "perflab-compare-warning, compiler.version differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            baseline.meta.compiler.version, candidate.meta.compiler.version
+            format_warning_value(&baseline.meta.compiler.version),
+            format_warning_value(&candidate.meta.compiler.version)
         );
     }
     if baseline.meta.compiler_args != candidate.meta.compiler_args {
         println!(
-            "perflab-compare-warning, compiler_args differ: \n\tbaseline=\t{:?} \n\tcandidate=\t{:?}",
-            baseline.meta.compiler_args, candidate.meta.compiler_args
+            "perflab-compare-warning, compiler_args differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
+            format_warning_value(&baseline.meta.compiler_args),
+            format_warning_value(&candidate.meta.compiler_args)
         );
     }
     if baseline.meta.cpu_pin != candidate.meta.cpu_pin {
         println!(
-            "perflab-compare-warning, cpu_pin differ: \n\tbaseline=\t{:?} \n\tcandidate=\t{:?}",
-            baseline.meta.cpu_pin, candidate.meta.cpu_pin
+            "perflab-compare-warning, cpu_pin differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
+            format_warning_value(&baseline.meta.cpu_pin),
+            format_warning_value(&candidate.meta.cpu_pin)
         );
     }
     if baseline.meta.warmup != candidate.meta.warmup {
         println!(
             "perflab-compare-warning, warmup differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            baseline.meta.warmup, candidate.meta.warmup
+            format_warning_value(&baseline.meta.warmup),
+            format_warning_value(&candidate.meta.warmup)
         );
     }
     if baseline.meta.reps != candidate.meta.reps {
         println!(
             "perflab-compare-warning, reps differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            baseline.meta.reps, candidate.meta.reps
+            format_warning_value(&baseline.meta.reps),
+            format_warning_value(&candidate.meta.reps)
         );
     }
     if baseline.meta.perf_events_requested != candidate.meta.perf_events_requested {
         println!(
-            "perflab-compare-warning, perf_events_requested differ: \n\tbaseline=\t{:?} \n\tcandidate=\t{:?}",
-            baseline.meta.perf_events_requested, candidate.meta.perf_events_requested
+            "perflab-compare-warning, perf_events_requested differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
+            format_warning_value(&baseline.meta.perf_events_requested),
+            format_warning_value(&candidate.meta.perf_events_requested)
         );
     }
     if baseline.meta.workdir != candidate.meta.workdir {
         println!(
             "perflab-compare-warning, workdir differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            baseline.meta.workdir, candidate.meta.workdir
+            format_warning_value(&baseline.meta.workdir),
+            format_warning_value(&candidate.meta.workdir)
         );
     }
     if baseline.meta.git_sha != candidate.meta.git_sha {
         println!(
             "perflab-compare-warning, git_sha differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            baseline.meta.git_sha, candidate.meta.git_sha
+            format_warning_value(&baseline.meta.git_sha),
+            format_warning_value(&candidate.meta.git_sha)
         );
     }
     if baseline.meta.uname != candidate.meta.uname {
         println!(
             "perflab-compare-warning, uname differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            baseline.meta.uname, candidate.meta.uname
+            format_warning_value(&baseline.meta.uname),
+            format_warning_value(&candidate.meta.uname)
         );
     }
 }
 
 fn print_cmp_header(baseline_path: &String, candidate_path: &String, bench: String, schm_ver: u32) {
+    println!("");
     println!("PerfLab compare v0");
     println!("\tbaseline:\t{baseline_path}");
     println!("\tcandidate:\t{candidate_path}");
@@ -281,4 +292,13 @@ fn get_percent_delta(baseline_phase: u64, candidate_phase: u64) -> String {
             ((candidate_phase as f64 - baseline_phase as f64) / baseline_phase as f64 * 100 as f64)
         ),
     }
+}
+
+fn format_warning_value<T>(value: &T) -> String
+where
+    T: ?Sized + serde::Serialize,
+{
+    serde_json::to_string(value).unwrap_or_else(|err| {
+        panic!("perflab-compare-value is not serde::Serialize! error:\n{err}");
+    })
 }
