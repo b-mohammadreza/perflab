@@ -178,12 +178,17 @@ Compared fields:
 * `summary.phases_ns.teardown`
 * common keys in `summary.perf.events`, when perf data exists in both files
 
-Skipped fields:
+Skipped fields / behavior:
 
-* perf comparison is skipped if one or both files have `summary.perf: null`
+* perf comparison is skipped if either file has `summary.perf: null`
 * perf event keys are compared only when present in both files
 * missing perf event keys are not treated as zero
-
-Metadata differences such as compiler version, git sha, uname, CPU pinning, reps, or requested perf events may produce warnings but do not stop comparison.
+* metadata differences such as compiler version, git sha, uname, CPU pinning, reps, or requested perf events may produce warnings but do not stop comparison
 
 Compare v0 uses existing median summaries only. It does not yet compute statistical confidence, outlier analysis, regression thresholds, or pass/fail decisions.
+
+To validate the current measurement and compare path:
+
+```bash
+./scripts/smoke.py
+```

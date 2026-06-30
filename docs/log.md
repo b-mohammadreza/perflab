@@ -37,3 +37,10 @@
 * compare: print phase deltas for `init`, `compute`, and `teardown` using `summary.phases_ns`.
 * compare: print perf event deltas for common `summary.perf.events` keys; skip perf comparison cleanly when either result has `summary.perf: null`.
 * docs: document comparison usage, compared fields, skipped fields, and the current limitation that compare v0 uses medians only, not statistical confidence.
+
+## 2026-06-29
+* test: extend `scripts/smoke.py` to cover `perflab compare`.
+* smoke: generate and validate two perf-enabled `matmul` runs, compare them, and check phase/perf comparison output.
+* smoke: generate and validate two perf-enabled `reduce` runs, compare them, and check phase/perf comparison output.
+* smoke: generate a no-perf `matmul` result and verify compare skips perf comparison cleanly.
+* compare: polish v0 warning output so optional values print in JSON style (`null`, arrays, numbers) instead of Rust debug style (`Some(...)`, `None`).
