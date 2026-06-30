@@ -299,6 +299,6 @@ where
     T: ?Sized + serde::Serialize,
 {
     serde_json::to_string(value).unwrap_or_else(|err| {
-        panic!("perflab-compare-value is not serde::Serialize! error:\n{err}");
+        panic!("perflab-compare-value is not implementing serde::Serialize trait! error:\n{err}");
     })
 }
