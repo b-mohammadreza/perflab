@@ -28,8 +28,9 @@ fn dispach_cmd(args: config::Commands) {
         config::Commands::Compare {
             baseline,
             candidate,
+            format,
         } => {
-            config::set_cmp_args(baseline, candidate);
+            config::set_cmp_args(baseline, candidate, format);
 
             compare::execute();
         }

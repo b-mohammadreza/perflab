@@ -8,6 +8,16 @@ const INDENT_LEN: usize = 30;
 pub fn execute() {
     let cmp_args = config::get_cmp_arg();
 
+    let format = cmp_args.format;
+    match format {
+        types::Format::Text => {
+            println!("Text format!");
+        }
+        types::Format::Markdown => {
+            println!("Markdown format!");
+        }
+    }
+
     let baseline_path = cmp_args.baseline.to_string_lossy().trim().to_string();
     let baseline_obj = get_runner_json(&baseline_path);
 

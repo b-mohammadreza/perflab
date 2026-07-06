@@ -1,3 +1,4 @@
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::PathBuf};
 
@@ -116,6 +117,7 @@ pub struct RunnerArgs {
 pub struct CompareArgs {
     pub baseline: PathBuf,
     pub candidate: PathBuf,
+    pub format: Format,
 }
 
 #[derive(Debug)]
@@ -126,3 +128,11 @@ pub struct CmpPerfEvent {
 }
 
 pub type CmpPerfEvents = Vec<CmpPerfEvent>;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum Format {
+    /// Compare result in text format
+    Text,
+    /// Compare result in markdown format
+    Markdown,
+}

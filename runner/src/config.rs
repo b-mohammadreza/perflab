@@ -47,6 +47,9 @@ pub enum Commands {
         /// Candidate/new result JSON file
         #[arg(value_name = "CANDIDATE")]
         candidate: PathBuf,
+
+        #[arg(value_enum, default_value_t = types::Format::Text, short, long, value_name = "FORMAT")]
+        format: types::Format,
     },
 }
 
@@ -75,11 +78,12 @@ pub fn set_runner_args(
         .expect("perflab-runner args already initialized!");
 }
 
-pub fn set_cmp_args(baseline: PathBuf, candidate: PathBuf) {
+pub fn set_cmp_args(baseline: PathBuf, candidate: PathBuf, format: types::Format) {
     CMP_ARGS
         .set(types::CompareArgs {
             baseline,
             candidate,
+            format,
         })
         .expect("perflab-compare args already initialized!")
 }
