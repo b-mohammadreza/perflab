@@ -3,20 +3,8 @@ use crate::io;
 use crate::types;
 use serde_json;
 
-const INDENT_LEN: usize = 30;
-
 pub fn execute() {
     let cmp_args = config::get_cmp_arg();
-
-    let format = cmp_args.format;
-    match format {
-        types::Format::Text => {
-            println!("Text format!");
-        }
-        types::Format::Markdown => {
-            println!("Markdown format!");
-        }
-    }
 
     let baseline_path = cmp_args.baseline.to_string_lossy().trim().to_string();
     let baseline_obj = get_runner_json(&baseline_path);
@@ -148,28 +136,61 @@ fn verify_good_to_have(baseline: &types::RunnerJson, candidate: &types::RunnerJs
 }
 
 fn print_cmp_header(baseline_path: &String, candidate_path: &String, bench: String, schm_ver: u32) {
+    let cmp_args = config::get_cmp_arg();
+
+    let mut header_prefix = "";
+    let mut item_prefix = "";
+    let mut white_space = "\t";
+    let mut backtick = "";
+
+    if let types::Format::Markdown = cmp_args.format {
+        header_prefix = "# ";
+        item_prefix = "-";
+        white_space = " ";
+        backtick = "`";
+    }
     println!("");
-    println!("PerfLab compare v0");
-    println!("\tbaseline:\t{baseline_path}");
-    println!("\tcandidate:\t{candidate_path}");
-    println!("\tbench:\t{bench}");
-    println!("\tschema:\t{schm_ver}");
+    println!("{header_prefix}PerfLab compare v0");
+    println!("{item_prefix}{white_space}baseline:{white_space}{backtick}{baseline_path}{backtick}");
+    println!(
+        "{item_prefix}{white_space}candidate:{white_space}{backtick}{candidate_path}{backtick}"
+    );
+    println!("{item_prefix}{white_space}bench:{white_space}{backtick}{bench}{backtick}");
+    println!("{item_prefix}{white_space}schema:{white_space}{backtick}{schm_ver}{backtick}");
     println!("");
 }
 
 fn verify_summary_phases(baseline: &types::RunnerJson, candidate: &types::RunnerJson) {
-    println!("Phase comparison:");
+    let cmp_args = config::get_cmp_arg();
+
+    let mut header_prefix = "";
+    let mut header_postfix = "";
+    let mut item_prefix = "\t";
+    let mut separator = "";
+    let mut white_space = "";
+    let mut indent_len: usize = 30;
+
+    if let types::Format::Markdown = cmp_args.format {
+        header_prefix = "## ";
+        header_postfix = "\n|---|---:|---:|---:|---:|";
+        item_prefix = "";
+        separator = "|";
+        white_space = " ";
+        indent_len = 0;
+    }
+
+    println!("{header_prefix}Phase comparison:");
     println!(
-        "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
+        "{item_prefix}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}{header_postfix}",
         "phase",
         "baseline(ns)",
         "candidate(ns)",
         "delta(ns)",
         "delta(%)",
-        w = INDENT_LEN
+        w = indent_len
     );
     println!(
-        "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
+        "{item_prefix}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}",
         "init",
         baseline.summary.phases_ns.init,
         candidate.summary.phases_ns.init,
@@ -181,10 +202,10 @@ fn verify_summary_phases(baseline: &types::RunnerJson, candidate: &types::Runner
             baseline.summary.phases_ns.init,
             candidate.summary.phases_ns.init
         ),
-        w = INDENT_LEN
+        w = indent_len
     );
     println!(
-        "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
+        "{item_prefix}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}",
         "compute",
         baseline.summary.phases_ns.compute,
         candidate.summary.phases_ns.compute,
@@ -196,10 +217,10 @@ fn verify_summary_phases(baseline: &types::RunnerJson, candidate: &types::Runner
             baseline.summary.phases_ns.compute,
             candidate.summary.phases_ns.compute
         ),
-        w = INDENT_LEN
+        w = indent_len
     );
     println!(
-        "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
+        "{item_prefix}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}",
         "teardown",
         baseline.summary.phases_ns.teardown,
         candidate.summary.phases_ns.teardown,
@@ -211,36 +232,55 @@ fn verify_summary_phases(baseline: &types::RunnerJson, candidate: &types::Runner
             baseline.summary.phases_ns.teardown,
             candidate.summary.phases_ns.teardown
         ),
-        w = INDENT_LEN
+        w = indent_len
     );
+    println!("");
 }
 
 fn verify_summary_perf(baseline: &types::RunnerJson, candidate: &types::RunnerJson) {
-    println!("Perf comparison:");
+    let cmp_args = config::get_cmp_arg();
+
+    let mut header_prefix = "";
+    let mut header_postfix = "";
+    let mut item_prefix = "\t";
+    let mut separator = "";
+    let mut white_space = "";
+    let mut indent_len: usize = 30;
+
+    if let types::Format::Markdown = cmp_args.format {
+        header_prefix = "## ";
+        header_postfix = "\n|---|---:|---:|---:|---:|";
+        item_prefix = "";
+        separator = "|";
+        white_space = " ";
+        indent_len = 0;
+    }
+
+    println!("{header_prefix}Perf comparison:");
 
     verify_summary_perf_avail(baseline, candidate);
 
     let perf_events = get_common_perf_events(baseline, candidate);
     if perf_events.is_empty() == false {
         println!(
-            "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
+            "{item_prefix}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}{header_postfix}",
             "event",
             "baseline",
             "candidate",
             "delta",
             "delta(%)",
-            w = INDENT_LEN
+            w = indent_len
         );
 
         for event in perf_events {
             println!(
-                "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
+                "{item_prefix}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}{white_space}{:<w$}{white_space}{separator}",
                 event.event_name,
                 event.baseline,
                 event.candidate,
                 get_abs_delta(event.baseline, event.candidate),
                 get_percent_delta(event.baseline, event.candidate),
-                w = INDENT_LEN
+                w = indent_len
             );
         }
     }

@@ -44,3 +44,11 @@
 * smoke: generate and validate two perf-enabled `reduce` runs, compare them, and check phase/perf comparison output.
 * smoke: generate a no-perf `matmul` result and verify compare skips perf comparison cleanly.
 * compare: polish v0 warning output so optional values print in JSON style (`null`, arrays, numbers) instead of Rust debug style (`Some(...)`, `None`).
+
+## 2026-07-06
+* compare: add `--format text` and `--format markdown` options.
+* compare: keep `text` as the default output format.
+* compare: add Markdown rendering for phase and perf comparison tables.
+* compare: preserve perf-null behavior in Markdown mode by printing phase comparison and reporting perf comparison as unavailable.
+* validation: manually checked default text, explicit text, Markdown, and perf-vs-no-perf Markdown comparison.
+* validation: confirmed `cargo fmt --check`, `cargo build`, and `./scripts/smoke.py` pass.

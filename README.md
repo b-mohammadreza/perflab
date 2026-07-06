@@ -178,6 +178,23 @@ Compared fields:
 * `summary.phases_ns.teardown`
 * common keys in `summary.perf.events`, when perf data exists in both files
 
+Output formats:
+
+```bash
+perflab compare <baseline.json> <candidate.json> --format text
+perflab compare <baseline.json> <candidate.json> --format markdown
+```
+
+`text` is the default output format and preserves the normal terminal report.
+
+`markdown` prints the comparison as Markdown tables, which is useful for GitHub issues, notes, and reports.
+
+During development:
+
+```bash
+cargo run -- compare results/<baseline>.json results/<candidate>.json --format markdown
+```
+
 Skipped fields / behavior:
 
 * perf comparison is skipped if either file has `summary.perf: null`
