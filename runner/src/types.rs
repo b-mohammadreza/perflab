@@ -135,4 +135,6 @@ pub enum Format {
     Text,
     /// Compare result in markdown format
     Markdown,
+    /// Compare result in csv format
+    Csv,
 }

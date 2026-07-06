@@ -15,9 +15,11 @@ pub fn execute() {
     if verify_required(&baseline_obj, &candidate_obj) == true {
         verify_good_to_have(&baseline_obj, &candidate_obj);
 
-        let bench = baseline_obj.meta.bench.clone();
-        let schm_ver = baseline_obj.meta.schema_version.clone();
-        print_cmp_header(&baseline_path, &candidate_path, bench, schm_ver);
+        if cmp_args.format != types::Format::Csv {
+            let bench = baseline_obj.meta.bench.clone();
+            let schm_ver = baseline_obj.meta.schema_version.clone();
+            print_cmp_header(&baseline_path, &candidate_path, bench, schm_ver);
+        }
 
         verify_summary_phases(&baseline_obj, &candidate_obj);
 
@@ -45,14 +47,14 @@ fn verify_required(baseline: &types::RunnerJson, candidate: &types::RunnerJson) 
     let mut result: bool = true;
 
     if baseline.meta.schema_version != candidate.meta.schema_version {
-        println!(
+        eprintln!(
             "perflab-compare-error, schema mismatch: \n\tbaseline=\t{} \n\tcandidate=\t{}",
             baseline.meta.schema_version, candidate.meta.schema_version
         );
         result = result && false;
     }
     if baseline.meta.bench != candidate.meta.bench {
-        println!(
+        eprintln!(
             "perflab-compare-error, benchmark mismatch: \n\tbaseline=\t{} \n\tcandidate=\t{}",
             baseline.meta.bench, candidate.meta.bench
         );
@@ -64,70 +66,70 @@ fn verify_required(baseline: &types::RunnerJson, candidate: &types::RunnerJson) 
 
 fn verify_good_to_have(baseline: &types::RunnerJson, candidate: &types::RunnerJson) {
     if baseline.meta.compiler.path != candidate.meta.compiler.path {
-        println!(
+        eprintln!(
             "perflab-compare-warning, compiler.path differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
             format_warning_value(&baseline.meta.compiler.path),
             format_warning_value(&candidate.meta.compiler.path)
         );
     }
     if baseline.meta.compiler.version != candidate.meta.compiler.version {
-        println!(
+        eprintln!(
             "perflab-compare-warning, compiler.version differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
             format_warning_value(&baseline.meta.compiler.version),
             format_warning_value(&candidate.meta.compiler.version)
         );
     }
     if baseline.meta.compiler_args != candidate.meta.compiler_args {
-        println!(
+        eprintln!(
             "perflab-compare-warning, compiler_args differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
             format_warning_value(&baseline.meta.compiler_args),
             format_warning_value(&candidate.meta.compiler_args)
         );
     }
     if baseline.meta.cpu_pin != candidate.meta.cpu_pin {
-        println!(
+        eprintln!(
             "perflab-compare-warning, cpu_pin differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
             format_warning_value(&baseline.meta.cpu_pin),
             format_warning_value(&candidate.meta.cpu_pin)
         );
     }
     if baseline.meta.warmup != candidate.meta.warmup {
-        println!(
+        eprintln!(
             "perflab-compare-warning, warmup differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
             format_warning_value(&baseline.meta.warmup),
             format_warning_value(&candidate.meta.warmup)
         );
     }
     if baseline.meta.reps != candidate.meta.reps {
-        println!(
+        eprintln!(
             "perflab-compare-warning, reps differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
             format_warning_value(&baseline.meta.reps),
             format_warning_value(&candidate.meta.reps)
         );
     }
     if baseline.meta.perf_events_requested != candidate.meta.perf_events_requested {
-        println!(
+        eprintln!(
             "perflab-compare-warning, perf_events_requested differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
             format_warning_value(&baseline.meta.perf_events_requested),
             format_warning_value(&candidate.meta.perf_events_requested)
         );
     }
     if baseline.meta.workdir != candidate.meta.workdir {
-        println!(
+        eprintln!(
             "perflab-compare-warning, workdir differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
             format_warning_value(&baseline.meta.workdir),
             format_warning_value(&candidate.meta.workdir)
         );
     }
     if baseline.meta.git_sha != candidate.meta.git_sha {
-        println!(
+        eprintln!(
             "perflab-compare-warning, git_sha differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
             format_warning_value(&baseline.meta.git_sha),
             format_warning_value(&candidate.meta.git_sha)
         );
     }
     if baseline.meta.uname != candidate.meta.uname {
-        println!(
+        eprintln!(
             "perflab-compare-warning, uname differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
             format_warning_value(&baseline.meta.uname),
             format_warning_value(&candidate.meta.uname)
@@ -149,6 +151,7 @@ fn print_cmp_header(baseline_path: &String, candidate_path: &String, bench: Stri
         white_space = " ";
         backtick = "`";
     }
+
     println!("");
     println!("{header_prefix}PerfLab compare v0");
     println!("{item_prefix}{white_space}baseline:{white_space}{backtick}{baseline_path}{backtick}");
