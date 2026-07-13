@@ -52,3 +52,11 @@
 * compare: preserve perf-null behavior in Markdown mode by printing phase comparison and reporting perf comparison as unavailable.
 * validation: manually checked default text, explicit text, Markdown, and perf-vs-no-perf Markdown comparison.
 * validation: confirmed `cargo fmt --check`, `cargo build`, and `./scripts/smoke.py` pass.
+
+## 2026-07-13
+* compare: refactor comparison output behind a shared renderer interface.
+* compare: keep format selection separate from rendering and invoke the selected renderer through a common interface.
+* compare: preserve existing text and Markdown output exactly after the refactor.
+* compare: route warnings, errors, and comparison-unavailable diagnostics to standard error.
+* validation: confirm pre-refactor and post-refactor text and Markdown outputs have no differences.
+* validation: confirm `cargo fmt --check`, `cargo build`, and `./scripts/smoke.py` pass.

@@ -209,3 +209,5 @@ To validate the current measurement and compare path:
 ```bash
 ./scripts/smoke.py
 ```
+
+Comparison report output is written to standard output. Warnings, errors, and comparison-unavailable diagnostics are written to standard error so report output can be redirected or consumed independently.
