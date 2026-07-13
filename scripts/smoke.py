@@ -232,7 +232,7 @@ def validate_compare_output(compare_output, expect_perf):
         if "cpu_core/instructions/u" not in output:
             fail("compare output missing cpu_core/instructions/u!")
     else:
-        if "summary.perf" not in output:
+        if "perf unavailable" not in output:
             fail("compare output did not report summary.perf unavailable!")
 
 
