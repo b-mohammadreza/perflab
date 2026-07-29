@@ -66,3 +66,6 @@
 - compare: keep CSV standard output clean by excluding report headers and diagnostics.
 - compare: reuse the shared comparison rendering path for text, Markdown, and CSV output.
 - validation: check CSV output, redirected CSV output, existing text/Markdown output, and smoke.
+- test: extend smoke validation to cover `perflab compare --format csv`.
+- test: verify CSV output includes phase and perf rows for perf-enabled comparisons.
+- test: verify perf-unavailable CSV output keeps report rows on stdout and diagnostics outside CSV output.

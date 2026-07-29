@@ -216,7 +216,7 @@ def run_bench(perflab_root_dir, bench, expect_perf):
     return result_json
 
 
-def validate_compare_output(compare_output, expect_perf):
+def validate_compare_output_format_text(compare_output, expect_perf):
     output = compare_output.stdout
 
     if "PerfLab compare v0" not in output:
@@ -235,14 +235,55 @@ def validate_compare_output(compare_output, expect_perf):
         if "perf unavailable" not in output:
             fail("compare output did not report summary.perf unavailable!")
 
+def validate_compare_output_format_csv(compare_output, expect_perf):
+    output = compare_output.stdout
+    err_out = compare_output.stderr
+
+    if "PerfLab compare v0" in output:
+        fail("CSV compare output contains text renderer header!")
+    if "# PerfLab compare v0" in output:
+        fail("CSV compare output contains markdown renderer header!")
+    if "baseline:" in output:
+        fail("CSV compare output contains baseline path!")
+    if "candidate:" in output:
+        fail("CSV compare output contains candidate path!")
+
+    if "kind,name,baseline,candidate,delta,delta_percent" not in output:
+        fail("CSV compare output missing header!")
+    if "phase,init," not in output:
+        fail("CSV compare output missing init phase comparison!")
+    if "phase,compute," not in output:
+        fail("CSV compare output missing compute phase comparison!")
+    if "phase,teardown," not in output:
+        fail("CSV compare output missing teardown phase comparison!")
+
+    if expect_perf:
+        if "perf,cpu_core/cycles/u," not in output:
+            fail("CSV compare output missing cpu_core/cycles/u!")
+        if "perf,cpu_core/instructions/u," not in output:
+            fail("CSV compare output missing cpu_core/instructions/u!")
+    else:
+        if "perf,cpu_core/cycles/u," in output:
+            fail("CSV compare output contains perf,cpu_core/cycles/u!")
+        if "perf,cpu_core/instructions/u," in output:
+            fail("CSV compare output contains perf,cpu_core/instructions/u!")
+        if "perf unavailable" not in err_out:
+            fail("CSV compare output did not report summary.perf unavailable!")
+        
 
 def compare_results(perflab_root_dir, baseline, candidate, expect_perf):
     baseline_rel = rel_to_root(perflab_root_dir, baseline)
     candidate_rel = rel_to_root(perflab_root_dir, candidate)
 
+    print(f'Comparing text format...')
     cmd = f"cargo run -- compare {baseline_rel} {candidate_rel}"
     compare_output = run_cmd_capture(cmd)
-    validate_compare_output(compare_output, expect_perf)
+    validate_compare_output_format_text(compare_output, expect_perf)
+
+    print(f'Comparing csv format...')
+    cmd = f"cargo run -- compare {baseline_rel} {candidate_rel} --format csv"
+    compare_output = run_cmd_capture(cmd)
+    validate_compare_output_format_csv(compare_output, expect_perf)
 
 
 def main():
