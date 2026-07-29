@@ -33,7 +33,7 @@ pub fn execute() {
             types::Format::Markdown => Box::new(MarkdownCmpRenderer {
                 cmp_g_data: &cmp_data,
             }),
-            types::Format::Csv => Box::new(TextCmpRenderer {
+            types::Format::Csv => Box::new(CsvCmpRenderer {
                 cmp_g_data: &cmp_data,
             }),
         };
@@ -538,6 +538,70 @@ impl<'cmp_g> CmpRenderer for MarkdownCmpRenderer<'cmp_g> {
                     item.candidate,
                     item.abs_delta,
                     item.percent_delta
+                );
+            }
+        }
+    }
+}
+
+struct CsvCmpRenderer<'cmp_g> {
+    cmp_g_data: &'cmp_g CmpGData,
+}
+
+impl<'cmp_g> CmpRenderer for CsvCmpRenderer<'cmp_g> {
+    fn render_cmp_header(&self) {
+        println!("kind,name,baseline,candidate,delta,delta_percent");
+    }
+
+    fn render_summary_phases(&self) {
+        println!(
+            "{},{},{},{},{},{}",
+            "phase",
+            self.cmp_g_data.init_phase.item_name,
+            self.cmp_g_data.init_phase.baseline,
+            self.cmp_g_data.init_phase.candidate,
+            self.cmp_g_data.init_phase.abs_delta,
+            self.cmp_g_data.init_phase.percent_delta,
+        );
+        println!(
+            "{},{},{},{},{},{}",
+            "phase",
+            self.cmp_g_data.compute_phase.item_name,
+            self.cmp_g_data.compute_phase.baseline,
+            self.cmp_g_data.compute_phase.candidate,
+            self.cmp_g_data.compute_phase.abs_delta,
+            self.cmp_g_data.compute_phase.percent_delta,
+        );
+        println!(
+            "{},{},{},{},{},{}",
+            "phase",
+            self.cmp_g_data.tear_down_phase.item_name,
+            self.cmp_g_data.tear_down_phase.baseline,
+            self.cmp_g_data.tear_down_phase.candidate,
+            self.cmp_g_data.tear_down_phase.abs_delta,
+            self.cmp_g_data.tear_down_phase.percent_delta,
+        );
+    }
+
+    fn render_summary_perf(&self) {
+        if self.cmp_g_data.perf_unavail {
+            eprintln!(
+                "perflab-compare-perf unavailable: perf data is unavailable in one or both inputs"
+            );
+        } else if self.cmp_g_data.perf_events_unavail {
+            eprintln!(
+                "perflab-compare-perf unavailable: perf events are unavailable in one or both inputs"
+            );
+        } else {
+            for item in &self.cmp_g_data.perf_events {
+                println!(
+                    "{},{},{},{},{},{}",
+                    "perf",
+                    item.item_name,
+                    item.baseline,
+                    item.candidate,
+                    item.abs_delta,
+                    item.percent_delta,
                 );
             }
         }

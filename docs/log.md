@@ -60,3 +60,9 @@
 * compare: route warnings, errors, and comparison-unavailable diagnostics to standard error.
 * validation: confirm pre-refactor and post-refactor text and Markdown outputs have no differences.
 * validation: confirm `cargo fmt --check`, `cargo build`, and `./scripts/smoke.py` pass.
+
+## 2026-07-29
+- compare: add CSV output format for phase and perf comparison rows.
+- compare: keep CSV standard output clean by excluding report headers and diagnostics.
+- compare: reuse the shared comparison rendering path for text, Markdown, and CSV output.
+- validation: check CSV output, redirected CSV output, existing text/Markdown output, and smoke.

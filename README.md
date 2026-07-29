@@ -183,20 +183,19 @@ Output formats:
 ```bash
 perflab compare <baseline.json> <candidate.json> --format text
 perflab compare <baseline.json> <candidate.json> --format markdown
+perflab compare <baseline.json> <candidate.json> --format csv
 ```
 
 `text` is the default output format and preserves the normal terminal report.
-
 `markdown` prints the comparison as Markdown tables, which is useful for GitHub issues, notes, and reports.
+`csv` prints comparison rows in comma-separated format for spreadsheet import or later plotting.
 
 During development:
-
 ```bash
 cargo run -- compare results/<baseline>.json results/<candidate>.json --format markdown
 ```
 
 Skipped fields / behavior:
-
 * perf comparison is skipped if either file has `summary.perf: null`
 * perf event keys are compared only when present in both files
 * missing perf event keys are not treated as zero
