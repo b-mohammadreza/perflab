@@ -69,3 +69,10 @@
 - test: extend smoke validation to cover `perflab compare --format csv`.
 - test: verify CSV output includes phase and perf rows for perf-enabled comparisons.
 - test: verify perf-unavailable CSV output keeps report rows on stdout and diagnostics outside CSV output.
+
+## 2026-08-03
+- compare: validate required result JSON paths before typed deserialization.
+- compare: report the exact path of missing required fields.
+- compare: handle input file and JSON parsing failures without panicking.
+- test: add negative compare-input validation coverage.
+- validation: confirm valid text, Markdown, and CSV output remains unchanged.

@@ -28,26 +28,29 @@ pub fn get_perf_stat_base_args() -> types::PerfStatArgs {
 }
 
 pub fn get_perf_events(timestamp: &String, rep: u32) -> types::Perf {
-    let csv_file_text = io::read_txt_file(&paths::get_perf_stat_path(timestamp, rep));
-    let mut perf_events: HashMap<String, u64> = HashMap::new();
+    if let Ok(csv_file_text) = io::read_txt_file(&paths::get_perf_stat_path(timestamp, rep)) {
+        let mut perf_events: HashMap<String, u64> = HashMap::new();
 
-    for line in csv_file_text.lines() {
-        let fields: Vec<&str> = line.split(',').collect();
+        for line in csv_file_text.lines() {
+            let fields: Vec<&str> = line.split(',').collect();
 
-        let stat = match fields[0].trim().replace(',', "").parse() {
-            Ok(val) => val,
-            Err(_) => continue,
-        };
+            let stat = match fields[0].trim().replace(',', "").parse() {
+                Ok(val) => val,
+                Err(_) => continue,
+            };
 
-        perf_events.insert(fields[2].trim().to_string(), stat);
-    }
+            perf_events.insert(fields[2].trim().to_string(), stat);
+        }
 
-    types::Perf {
-        csv_path: paths::get_perf_stat_path(timestamp, rep),
-        perf_stat_args: get_perf_stat_args(timestamp, rep),
-        perf_events: types::PerfEvents {
-            events: perf_events,
-        },
+        types::Perf {
+            csv_path: paths::get_perf_stat_path(timestamp, rep),
+            perf_stat_args: get_perf_stat_args(timestamp, rep),
+            perf_events: types::PerfEvents {
+                events: perf_events,
+            },
+        }
+    } else {
+        panic!("perflab-error: read_txt_file() failed!");
     }
 }
 

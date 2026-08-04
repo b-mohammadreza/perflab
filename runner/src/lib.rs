@@ -10,4 +10,4 @@ pub mod pipeline;
 mod results;
 mod run;
 mod summary;
-mod types;
+pub mod types;

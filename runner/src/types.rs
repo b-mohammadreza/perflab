@@ -138,3 +138,87 @@ pub enum Format {
     /// Compare result in csv format
     Csv,
 }
+
+pub enum CmpInputSide {
+    JsonBaseline,
+    JsonCandidate,
+}
+
+pub struct CmpItemData {
+    pub item_name: String,
+    pub baseline: u64,
+    pub candidate: u64,
+    pub abs_delta: String,
+    pub percent_delta: String,
+}
+
+/// To store global comparison data and pass its reference to indivisual renderers
+pub struct CmpGData {
+    pub baseline_path: String,
+    pub candidate_path: String,
+    pub bench: String,
+    pub schm_ver: u32,
+    pub init_phase: CmpItemData,
+    pub compute_phase: CmpItemData,
+    pub tear_down_phase: CmpItemData,
+    pub perf_unavail: bool,
+    pub perf_events_unavail: bool,
+    pub perf_events: Vec<CmpItemData>,
+}
+
+pub trait CmpRenderer {
+    fn render_cmp_result(&self) {
+        self.render_cmp_header();
+        self.render_summary_phases();
+        self.render_summary_perf();
+    }
+
+    fn render_cmp_header(&self);
+    fn render_summary_phases(&self);
+    fn render_summary_perf(&self);
+}
+
+pub struct TextCmpRenderer<'cmp_g> {
+    pub cmp_g_data: &'cmp_g CmpGData,
+}
+
+pub struct MarkdownCmpRenderer<'cmp_g> {
+    pub cmp_g_data: &'cmp_g CmpGData,
+}
+
+pub struct CsvCmpRenderer<'cmp_g> {
+    pub cmp_g_data: &'cmp_g CmpGData,
+}
+
+pub enum CompareError {
+    ReadInput {
+        input: CmpInputSide,
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    MalformedJson {
+        input: CmpInputSide,
+        path: PathBuf,
+        source: serde_json::Error,
+    },
+    MissingRequiredField {
+        input: CmpInputSide,
+        field: String,
+    },
+    Deserialize {
+        input: CmpInputSide,
+        path: PathBuf,
+        source: serde_path_to_error::Error<serde_json::Error>,
+    },
+    SchemaMismatch {
+        baseline_ver: u32,
+        candidate_ver: u32,
+    },
+    BenchmarkMismatch {
+        baseline_bench: String,
+        candidate_bench: String,
+    },
+    NotImplSerdeSerialize {
+        source: serde_json::Error,
+    },
+}
