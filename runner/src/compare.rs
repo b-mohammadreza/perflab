@@ -2,156 +2,287 @@ use crate::config;
 use crate::io;
 use crate::types;
 use serde_json;
+use std::path::PathBuf;
 
-pub fn execute() {
+pub fn execute() -> Result<(), types::CompareError> {
     let cmp_args = config::get_cmp_arg();
 
+    let b_json_data: String =
+        get_json_str(cmp_args.baseline.clone(), types::CmpInputSide::JsonBaseline)?;
+    let b_generic_val: serde_json::Value = get_json_val_obj(
+        &b_json_data,
+        cmp_args.baseline.clone(),
+        types::CmpInputSide::JsonBaseline,
+    )?;
+    verify_required_structure(&b_generic_val, types::CmpInputSide::JsonBaseline)?;
+    let baseline_obj: types::RunnerJson = get_runner_json(
+        &b_json_data,
+        cmp_args.baseline.clone(),
+        types::CmpInputSide::JsonBaseline,
+    )?;
+
+    let c_json_data: String = get_json_str(
+        cmp_args.candidate.clone(),
+        types::CmpInputSide::JsonCandidate,
+    )?;
+    let c_generic_val: serde_json::Value = get_json_val_obj(
+        &c_json_data,
+        cmp_args.candidate.clone(),
+        types::CmpInputSide::JsonCandidate,
+    )?;
+    verify_required_structure(&c_generic_val, types::CmpInputSide::JsonCandidate)?;
+    let candidate_obj: types::RunnerJson = get_runner_json(
+        &c_json_data,
+        cmp_args.candidate.clone(),
+        types::CmpInputSide::JsonCandidate,
+    )?;
+
+    verify_required(&baseline_obj, &candidate_obj)?;
+    verify_good_to_have(&baseline_obj, &candidate_obj)?;
+
     let baseline_path = cmp_args.baseline.to_string_lossy().trim().to_string();
-    let baseline_obj = get_runner_json(&baseline_path);
-
     let candidate_path = cmp_args.candidate.to_string_lossy().trim().to_string();
-    let candidate_obj = get_runner_json(&candidate_path);
+    let bench = baseline_obj.meta.bench.clone();
+    let schm_ver = baseline_obj.meta.schema_version.clone();
+    let cmp_data: types::CmpGData = get_cmp_g_data(
+        &baseline_path,
+        &candidate_path,
+        bench,
+        schm_ver,
+        &baseline_obj,
+        &candidate_obj,
+    );
 
-    if verify_required(&baseline_obj, &candidate_obj) == true {
-        verify_good_to_have(&baseline_obj, &candidate_obj);
+    let cmp_renderer: Box<dyn types::CmpRenderer> = match cmp_args.format {
+        types::Format::Text => Box::new(types::TextCmpRenderer {
+            cmp_g_data: &cmp_data,
+        }),
+        types::Format::Markdown => Box::new(types::MarkdownCmpRenderer {
+            cmp_g_data: &cmp_data,
+        }),
+        types::Format::Csv => Box::new(types::CsvCmpRenderer {
+            cmp_g_data: &cmp_data,
+        }),
+    };
 
-        let bench = baseline_obj.meta.bench.clone();
-        let schm_ver = baseline_obj.meta.schema_version.clone();
-        let cmp_data: CmpGData = get_cmp_g_data(
-            &baseline_path,
-            &candidate_path,
-            bench,
-            schm_ver,
-            &baseline_obj,
-            &candidate_obj,
-        );
+    cmp_renderer.render_cmp_result();
 
-        let cmp_renderer: Box<dyn CmpRenderer> = match cmp_args.format {
-            types::Format::Text => Box::new(TextCmpRenderer {
-                cmp_g_data: &cmp_data,
-            }),
-            types::Format::Markdown => Box::new(MarkdownCmpRenderer {
-                cmp_g_data: &cmp_data,
-            }),
-            types::Format::Csv => Box::new(CsvCmpRenderer {
-                cmp_g_data: &cmp_data,
-            }),
-        };
+    Ok(())
+}
 
-        cmp_renderer.render_cmp_result();
+pub fn get_input_side_str(cmp_json_type: &types::CmpInputSide) -> String {
+    match cmp_json_type {
+        types::CmpInputSide::JsonBaseline => String::from("Baseline"),
+        types::CmpInputSide::JsonCandidate => String::from("Candidate"),
     }
 }
 
-fn get_runner_json(json_path: &String) -> types::RunnerJson {
-    let json_data = io::read_txt_file(&json_path);
-    let json_dser = &mut serde_json::Deserializer::from_str(&json_data);
+fn get_json_str(
+    json_path: PathBuf,
+    cmp_json_type: types::CmpInputSide,
+) -> Result<String, types::CompareError> {
+    let json_path_str: String = json_path.to_string_lossy().trim().to_string();
 
+    match io::read_txt_file(&json_path_str) {
+        Ok(json_data) => Ok(json_data),
+        Err(file_err) => Err(types::CompareError::ReadInput {
+            input: cmp_json_type,
+            path: json_path,
+            source: file_err,
+        }),
+    }
+}
+
+fn get_json_val_obj(
+    json_data: &String,
+    json_path: PathBuf,
+    cmp_json_type: types::CmpInputSide,
+) -> Result<serde_json::Value, types::CompareError> {
+    match serde_json::from_str(&json_data) {
+        Ok(val) => Ok(val),
+        Err(error) => Err(types::CompareError::MalformedJson {
+            input: cmp_json_type,
+            path: json_path,
+            source: error,
+        }),
+    }
+}
+
+fn verify_required_structure(
+    generic_val: &serde_json::Value,
+    cmp_json_type: types::CmpInputSide,
+) -> Result<(), types::CompareError> {
+    if generic_val.pointer("/meta/schema_version").is_none() {
+        Err(types::CompareError::MissingRequiredField {
+            input: cmp_json_type,
+            field: String::from("meta.schema_version"),
+        })
+    } else if generic_val.pointer("/meta/bench").is_none() {
+        Err(types::CompareError::MissingRequiredField {
+            input: cmp_json_type,
+            field: String::from("meta.bench"),
+        })
+    } else if generic_val.pointer("/summary/phases_ns").is_none() {
+        Err(types::CompareError::MissingRequiredField {
+            input: cmp_json_type,
+            field: String::from("summary.phases_ns"),
+        })
+    } else if generic_val.pointer("/summary/phases_ns/init").is_none() {
+        Err(types::CompareError::MissingRequiredField {
+            input: cmp_json_type,
+            field: String::from("summary.phases_ns.init"),
+        })
+    } else if generic_val.pointer("/summary/phases_ns/compute").is_none() {
+        Err(types::CompareError::MissingRequiredField {
+            input: cmp_json_type,
+            field: String::from("summary.phases_ns.compute"),
+        })
+    } else if generic_val.pointer("/summary/phases_ns/teardown").is_none() {
+        Err(types::CompareError::MissingRequiredField {
+            input: cmp_json_type,
+            field: String::from("summary.phases_ns.teardown"),
+        })
+    } else if generic_val.pointer("/summary/perf").is_none() {
+        Err(types::CompareError::MissingRequiredField {
+            input: cmp_json_type,
+            field: String::from("summary.perf"),
+        })
+    } else if generic_val
+        .pointer("/summary/perf")
+        .is_some_and(|perf| !perf.is_null())
+    {
+        if generic_val.pointer("/summary/perf/events").is_none() {
+            Err(types::CompareError::MissingRequiredField {
+                input: cmp_json_type,
+                field: String::from("summary.perf.events"),
+            })
+        } else {
+            Ok(())
+        }
+    } else {
+        Ok(())
+    }
+}
+
+fn get_runner_json(
+    json_data: &String,
+    json_path: PathBuf,
+    cmp_json_type: types::CmpInputSide,
+) -> Result<types::RunnerJson, types::CompareError> {
+    let json_dser = &mut serde_json::Deserializer::from_str(&json_data);
     let json_res: Result<types::RunnerJson, _> = serde_path_to_error::deserialize(json_dser);
     match json_res {
-        Ok(obj) => obj,
-        Err(err) => {
-            panic!(
-                "perflab-compare-file({json_path}), error occured at {} - might be missing!",
-                err.path().to_string()
-            );
-        }
+        Ok(obj) => Ok(obj),
+        Err(err) => Err(types::CompareError::Deserialize {
+            input: cmp_json_type,
+            path: json_path,
+            source: err,
+        }),
     }
 }
 
-fn verify_required(baseline: &types::RunnerJson, candidate: &types::RunnerJson) -> bool {
-    let mut result: bool = true;
-
+fn verify_required(
+    baseline: &types::RunnerJson,
+    candidate: &types::RunnerJson,
+) -> Result<(), types::CompareError> {
     if baseline.meta.schema_version != candidate.meta.schema_version {
-        eprintln!(
-            "perflab-compare-error, schema mismatch: \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.schema_version),
-            format_warn_err_value(&candidate.meta.schema_version)
-        );
-        result = result && false;
+        Err(types::CompareError::SchemaMismatch {
+            baseline_ver: baseline.meta.schema_version,
+            candidate_ver: candidate.meta.schema_version,
+        })
+    } else if baseline.meta.bench != candidate.meta.bench {
+        Err(types::CompareError::BenchmarkMismatch {
+            baseline_bench: baseline.meta.bench.clone(),
+            candidate_bench: candidate.meta.bench.clone(),
+        })
+    } else {
+        Ok(())
     }
-    if baseline.meta.bench != candidate.meta.bench {
-        eprintln!(
-            "perflab-compare-error, benchmark mismatch: \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.bench),
-            format_warn_err_value(&candidate.meta.bench)
-        );
-        result = result && false;
-    }
-
-    result
 }
 
-fn verify_good_to_have(baseline: &types::RunnerJson, candidate: &types::RunnerJson) {
+fn verify_good_to_have(
+    baseline: &types::RunnerJson,
+    candidate: &types::RunnerJson,
+) -> Result<(), types::CompareError> {
     if baseline.meta.compiler.path != candidate.meta.compiler.path {
         eprintln!(
-            "perflab-compare-warning, compiler.path differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.compiler.path),
-            format_warn_err_value(&candidate.meta.compiler.path)
+            "perflab-compare-warning: compiler.path differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
+            format_warn_err_value(&baseline.meta.compiler.path)?,
+            format_warn_err_value(&candidate.meta.compiler.path)?
         );
     }
     if baseline.meta.compiler.version != candidate.meta.compiler.version {
         eprintln!(
-            "perflab-compare-warning, compiler.version differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.compiler.version),
-            format_warn_err_value(&candidate.meta.compiler.version)
+            "perflab-compare-warning: compiler.version differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
+            format_warn_err_value(&baseline.meta.compiler.version)?,
+            format_warn_err_value(&candidate.meta.compiler.version)?
         );
     }
-    if baseline.meta.compiler_args != candidate.meta.compiler_args {
+    if baseline
+        .meta
+        .compiler_args
+        .ne(&candidate.meta.compiler_args)
+    {
         eprintln!(
-            "perflab-compare-warning, compiler_args differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.compiler_args),
-            format_warn_err_value(&candidate.meta.compiler_args)
+            "perflab-compare-warning: compiler_args differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
+            format_warn_err_value(&baseline.meta.compiler_args)?,
+            format_warn_err_value(&candidate.meta.compiler_args)?
         );
     }
-    if baseline.meta.cpu_pin != candidate.meta.cpu_pin {
+    if baseline.meta.cpu_pin.ne(&candidate.meta.cpu_pin) {
         eprintln!(
-            "perflab-compare-warning, cpu_pin differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.cpu_pin),
-            format_warn_err_value(&candidate.meta.cpu_pin)
+            "perflab-compare-warning: cpu_pin differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
+            format_warn_err_value(&baseline.meta.cpu_pin)?,
+            format_warn_err_value(&candidate.meta.cpu_pin)?
         );
     }
     if baseline.meta.warmup != candidate.meta.warmup {
         eprintln!(
-            "perflab-compare-warning, warmup differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.warmup),
-            format_warn_err_value(&candidate.meta.warmup)
+            "perflab-compare-warning: warmup differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
+            format_warn_err_value(&baseline.meta.warmup)?,
+            format_warn_err_value(&candidate.meta.warmup)?
         );
     }
     if baseline.meta.reps != candidate.meta.reps {
         eprintln!(
-            "perflab-compare-warning, reps differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.reps),
-            format_warn_err_value(&candidate.meta.reps)
+            "perflab-compare-warning: reps differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
+            format_warn_err_value(&baseline.meta.reps)?,
+            format_warn_err_value(&candidate.meta.reps)?
         );
     }
-    if baseline.meta.perf_events_requested != candidate.meta.perf_events_requested {
+    if baseline
+        .meta
+        .perf_events_requested
+        .ne(&candidate.meta.perf_events_requested)
+    {
         eprintln!(
-            "perflab-compare-warning, perf_events_requested differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.perf_events_requested),
-            format_warn_err_value(&candidate.meta.perf_events_requested)
+            "perflab-compare-warning: perf_events_requested differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
+            format_warn_err_value(&baseline.meta.perf_events_requested)?,
+            format_warn_err_value(&candidate.meta.perf_events_requested)?
         );
     }
     if baseline.meta.workdir != candidate.meta.workdir {
         eprintln!(
-            "perflab-compare-warning, workdir differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.workdir),
-            format_warn_err_value(&candidate.meta.workdir)
+            "perflab-compare-warning: workdir differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
+            format_warn_err_value(&baseline.meta.workdir)?,
+            format_warn_err_value(&candidate.meta.workdir)?
         );
     }
     if baseline.meta.git_sha != candidate.meta.git_sha {
         eprintln!(
-            "perflab-compare-warning, git_sha differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.git_sha),
-            format_warn_err_value(&candidate.meta.git_sha)
+            "perflab-compare-warning: git_sha differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
+            format_warn_err_value(&baseline.meta.git_sha)?,
+            format_warn_err_value(&candidate.meta.git_sha)?
         );
     }
     if baseline.meta.uname != candidate.meta.uname {
         eprintln!(
-            "perflab-compare-warning, uname differ: \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.uname),
-            format_warn_err_value(&candidate.meta.uname)
+            "perflab-compare-warning: uname differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
+            format_warn_err_value(&baseline.meta.uname)?,
+            format_warn_err_value(&candidate.meta.uname)?
         );
     }
+    Ok(())
 }
 
 fn get_cmp_g_data(
@@ -161,15 +292,15 @@ fn get_cmp_g_data(
     schm_ver: u32,
     baseline: &types::RunnerJson,
     candidate: &types::RunnerJson,
-) -> CmpGData {
-    let mut cmp_g_data: CmpGData = CmpGData::new();
+) -> types::CmpGData {
+    let mut cmp_g_data: types::CmpGData = types::CmpGData::new();
 
     cmp_g_data.baseline_path = baseline_path.to_string();
     cmp_g_data.candidate_path = candidate_path.to_string();
     cmp_g_data.bench = bench;
     cmp_g_data.schm_ver = schm_ver;
 
-    cmp_g_data.init_phase = CmpItemData {
+    cmp_g_data.init_phase = types::CmpItemData {
         item_name: String::from("init"),
         baseline: baseline.summary.phases_ns.init,
         candidate: candidate.summary.phases_ns.init,
@@ -183,7 +314,7 @@ fn get_cmp_g_data(
         ),
     };
 
-    cmp_g_data.compute_phase = CmpItemData {
+    cmp_g_data.compute_phase = types::CmpItemData {
         item_name: String::from("compute"),
         baseline: baseline.summary.phases_ns.compute,
         candidate: candidate.summary.phases_ns.compute,
@@ -197,7 +328,7 @@ fn get_cmp_g_data(
         ),
     };
 
-    cmp_g_data.tear_down_phase = CmpItemData {
+    cmp_g_data.tear_down_phase = types::CmpItemData {
         item_name: String::from("teardown"),
         baseline: baseline.summary.phases_ns.teardown,
         candidate: candidate.summary.phases_ns.teardown,
@@ -217,7 +348,7 @@ fn get_cmp_g_data(
         let perf_events = get_common_perf_events(baseline, candidate);
 
         for event in perf_events {
-            cmp_g_data.perf_events.push(CmpItemData {
+            cmp_g_data.perf_events.push(types::CmpItemData {
                 item_name: event.event_name,
                 baseline: event.baseline,
                 candidate: event.candidate,
@@ -231,7 +362,7 @@ fn get_cmp_g_data(
 }
 
 fn verify_summary_perf_avail(
-    cmp_data: &mut CmpGData,
+    cmp_data: &mut types::CmpGData,
     baseline: &types::RunnerJson,
     candidate: &types::RunnerJson,
 ) {
@@ -277,7 +408,7 @@ fn get_common_perf_events(
 }
 
 fn get_abs_delta(baseline_phase: u64, candidate_phase: u64) -> String {
-    format!("{:+}", candidate_phase as i64 - baseline_phase as i64)
+    format!("{:+}", candidate_phase as i64 - baseline_phase as i64).to_string()
 }
 
 fn get_percent_delta(baseline_phase: u64, candidate_phase: u64) -> String {
@@ -290,51 +421,39 @@ fn get_percent_delta(baseline_phase: u64, candidate_phase: u64) -> String {
     }
 }
 
-fn format_warn_err_value<T>(value: &T) -> String
+/// To have all values formatted as json.
+pub fn format_warn_err_value<T>(value: &T) -> Result<String, types::CompareError>
 where
     T: ?Sized + serde::Serialize,
 {
-    serde_json::to_string(value).unwrap_or_else(|err| {
-        panic!("perflab-compare-value is not implementing serde::Serialize trait! error:\n{err}");
-    })
+    match serde_json::to_string(value) {
+        Ok(str_val) => Ok(str_val),
+        Err(s_err) => Err(types::CompareError::NotImplSerdeSerialize { source: s_err }),
+    }
 }
 
-/// To store global comparison data and pass its reference to indivisual renderers
-struct CmpGData {
-    pub baseline_path: String,
-    pub candidate_path: String,
-    pub bench: String,
-    pub schm_ver: u32,
-    pub init_phase: CmpItemData,
-    pub compute_phase: CmpItemData,
-    pub tear_down_phase: CmpItemData,
-    pub perf_unavail: bool,
-    pub perf_events_unavail: bool,
-    pub perf_events: Vec<CmpItemData>,
-}
-
-impl CmpGData {
-    fn new() -> CmpGData {
-        CmpGData {
+impl types::CmpGData {
+    fn new() -> types::CmpGData {
+        types::CmpGData {
             baseline_path: String::from(""),
             candidate_path: String::from(""),
             bench: String::from(""),
             schm_ver: 0,
-            init_phase: CmpItemData {
+            init_phase: types::CmpItemData {
                 item_name: String::from(""),
                 baseline: 0u64,
                 candidate: 0u64,
                 abs_delta: String::from(""),
                 percent_delta: String::from(""),
             },
-            compute_phase: CmpItemData {
+            compute_phase: types::CmpItemData {
                 item_name: String::from(""),
                 baseline: 0u64,
                 candidate: 0u64,
                 abs_delta: String::from(""),
                 percent_delta: String::from(""),
             },
-            tear_down_phase: CmpItemData {
+            tear_down_phase: types::CmpItemData {
                 item_name: String::from(""),
                 baseline: 0u64,
                 candidate: 0u64,
@@ -348,31 +467,7 @@ impl CmpGData {
     }
 }
 
-struct CmpItemData {
-    pub item_name: String,
-    pub baseline: u64,
-    pub candidate: u64,
-    pub abs_delta: String,
-    pub percent_delta: String,
-}
-
-trait CmpRenderer {
-    fn render_cmp_result(&self) {
-        self.render_cmp_header();
-        self.render_summary_phases();
-        self.render_summary_perf();
-    }
-
-    fn render_cmp_header(&self);
-    fn render_summary_phases(&self);
-    fn render_summary_perf(&self);
-}
-
-struct TextCmpRenderer<'cmp_g> {
-    cmp_g_data: &'cmp_g CmpGData,
-}
-
-impl<'cmp_g> CmpRenderer for TextCmpRenderer<'cmp_g> {
+impl<'cmp_g> types::CmpRenderer for types::TextCmpRenderer<'cmp_g> {
     fn render_cmp_header(&self) {
         println!("");
         println!("PerfLab compare v0");
@@ -433,11 +528,11 @@ impl<'cmp_g> CmpRenderer for TextCmpRenderer<'cmp_g> {
 
         if self.cmp_g_data.perf_unavail {
             println!(
-                "perflab-compare-perf unavailable: perf data is unavailable in one or both inputs"
+                "perflab-compare-warning: perf unavailable, perf data is unavailable in one or both inputs"
             );
         } else if self.cmp_g_data.perf_events_unavail {
             println!(
-                "perflab-compare-perf unavailable: perf events are unavailable in one or both inputs"
+                "perflab-compare-error: perf unavailable, perf events are unavailable in one or both inputs"
             );
         } else {
             println!(
@@ -465,11 +560,7 @@ impl<'cmp_g> CmpRenderer for TextCmpRenderer<'cmp_g> {
     }
 }
 
-struct MarkdownCmpRenderer<'cmp_g> {
-    cmp_g_data: &'cmp_g CmpGData,
-}
-
-impl<'cmp_g> CmpRenderer for MarkdownCmpRenderer<'cmp_g> {
+impl<'cmp_g> types::CmpRenderer for types::MarkdownCmpRenderer<'cmp_g> {
     fn render_cmp_header(&self) {
         println!("");
         println!("# PerfLab compare v0");
@@ -518,11 +609,11 @@ impl<'cmp_g> CmpRenderer for MarkdownCmpRenderer<'cmp_g> {
 
         if self.cmp_g_data.perf_unavail {
             println!(
-                "perflab-compare-perf unavailable: perf data is unavailable in one or both inputs"
+                "perflab-compare-warning: perf unavailable, perf data is unavailable in one or both inputs"
             );
         } else if self.cmp_g_data.perf_events_unavail {
             println!(
-                "perflab-compare-perf unavailable: perf events are unavailable in one or both inputs"
+                "perflab-compare-error: perf unavailable, perf events are unavailable in one or both inputs"
             );
         } else {
             println!(
@@ -544,11 +635,7 @@ impl<'cmp_g> CmpRenderer for MarkdownCmpRenderer<'cmp_g> {
     }
 }
 
-struct CsvCmpRenderer<'cmp_g> {
-    cmp_g_data: &'cmp_g CmpGData,
-}
-
-impl<'cmp_g> CmpRenderer for CsvCmpRenderer<'cmp_g> {
+impl<'cmp_g> types::CmpRenderer for types::CsvCmpRenderer<'cmp_g> {
     fn render_cmp_header(&self) {
         println!("kind,name,baseline,candidate,delta,delta_percent");
     }
@@ -586,11 +673,11 @@ impl<'cmp_g> CmpRenderer for CsvCmpRenderer<'cmp_g> {
     fn render_summary_perf(&self) {
         if self.cmp_g_data.perf_unavail {
             eprintln!(
-                "perflab-compare-perf unavailable: perf data is unavailable in one or both inputs"
+                "perflab-compare-warning: perf unavailable, perf data is unavailable in one or both inputs"
             );
         } else if self.cmp_g_data.perf_events_unavail {
             eprintln!(
-                "perflab-compare-perf unavailable: perf events are unavailable in one or both inputs"
+                "perflab-compare-error: perf unavailable, perf events are unavailable in one or both inputs"
             );
         } else {
             for item in &self.cmp_g_data.perf_events {
