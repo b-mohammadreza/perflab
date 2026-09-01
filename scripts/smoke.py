@@ -66,7 +66,7 @@ def validate_result_json(perflab_root_dir, result_json, bench, expect_perf):
             schema_version = jobject.get("meta").get("schema_version")
             if schema_version == None:
                 fail("meta.schema_version not found!")
-            if schema_version != 1:
+            if schema_version != 2:
                 fail("meta.schema_version NOK!")
 
             ##
@@ -156,23 +156,57 @@ def validate_result_json(perflab_root_dir, result_json, bench, expect_perf):
                         fail("samples.sample.perf should be null when perf is off!")
 
             ##
-            # summary.phases_ns.compute
+            # summary.phases_ns
             ##
-            sum_ph_compute = jobject.get("summary").get("phases_ns").get("compute")
-            if sum_ph_compute == None:
-                fail("summary.phases_ns.compute not found!")
+            sum_phases = jobject.get("summary").get("phases_ns")
+            if sum_phases == None:
+                fail("summary.phases_ns not found!")
+
+            for phase in ["init", "compute", "teardown"]:
+                phase_summary = sum_phases.get(phase)
+                if phase_summary == None:
+                    fail(f"summary.phases_ns.{phase} not found!")
+                if type(phase_summary) != dict:
+                    fail(f"summary.phases_ns.{phase} is not an object!")
+
+                median_ns = phase_summary.get("median_ns")
+                min_ns = phase_summary.get("min_ns")
+                max_ns = phase_summary.get("max_ns")
+                spread_percent = phase_summary.get("spread_percent", "MISSING")
+
+                if median_ns == None:
+                    fail(f"summary.phases_ns.{phase}.median_ns not found!")
+                if min_ns == None:
+                    fail(f"summary.phases_ns.{phase}.min_ns not found!")
+                if max_ns == None:
+                    fail(f"summary.phases_ns.{phase}.max_ns not found!")
+                if spread_percent == "MISSING":
+                    fail(f"summary.phases_ns.{phase}.spread_percent not found!")
+
+                if type(median_ns) != int:
+                    fail(f"summary.phases_ns.{phase}.median_ns is not an integer!")
+                if type(min_ns) != int:
+                    fail(f"summary.phases_ns.{phase}.min_ns is not an integer!")
+                if type(max_ns) != int:
+                    fail(f"summary.phases_ns.{phase}.max_ns is not an integer!")
+
+                if not (min_ns <= median_ns <= max_ns):
+                    fail(f"summary.phases_ns.{phase}: min_ns <= median_ns <= max_ns failed!")
+
+                if spread_percent is not None:
+                    if type(spread_percent) not in (int, float):
+                        fail(f"summary.phases_ns.{phase}.spread_percent is not numeric or null!")
+                    if spread_percent < 0:
+                        fail(f"summary.phases_ns.{phase}.spread_percent is negative!")
+
+            sum_ph_compute = sum_phases.get("compute").get("median_ns")
             if sum_ph_compute <= 0:
-                fail("summary.phases_ns.compute is not positive!")
+                fail("summary.phases_ns.compute.median_ns is not positive!")
 
             if bench == "reduce":
-                ##
-                # summary.phases_ns.init
-                ##
-                sum_ph_init = jobject.get("summary").get("phases_ns").get("init")
-                if sum_ph_init == None:
-                    fail("summary.phases_ns.init not found!")
+                sum_ph_init = sum_phases.get("init").get("median_ns")
                 if sum_ph_compute <= sum_ph_init:
-                    fail("reduce: summary.phases_ns.compute not greater than summary.phases_ns.init!")
+                    fail("reduce: summary.phases_ns.compute.median_ns not greater than summary.phases_ns.init.median_ns!")
 
             ##
             # summary.perf
@@ -218,22 +252,57 @@ def run_bench(perflab_root_dir, bench, expect_perf):
 
 def validate_compare_output_format_text(compare_output, expect_perf):
     output = compare_output.stdout
+    err_out = compare_output.stderr
 
     if "PerfLab compare v0" not in output:
         fail("compare output missing header!")
     if "Phase comparison:" not in output:
         fail("compare output missing phase comparison!")
-    if "Perf comparison:" not in output:
-        fail("compare output missing perf comparison!")
+    if "baseline spread" not in output:
+        fail("compare output missing baseline spread!")
+    if "candidate spread" not in output:
+        fail("compare output missing candidate spread!")
 
     if expect_perf:
+        if "Perf comparison:" not in output:
+            fail("compare output missing perf comparison!")
         if "cpu_core/cycles/u" not in output:
             fail("compare output missing cpu_core/cycles/u!")
         if "cpu_core/instructions/u" not in output:
             fail("compare output missing cpu_core/instructions/u!")
     else:
-        if "perf unavailable" not in output:
-            fail("compare output did not report summary.perf unavailable!")
+        if "perf unavailable" not in err_out:
+            fail("compare stderr did not report summary.perf unavailable!")
+        if "perf unavailable" in output:
+            fail("compare stdout contains summary.perf unavailable warning!")
+
+
+def validate_compare_output_format_markdown(compare_output, expect_perf):
+    output = compare_output.stdout
+    err_out = compare_output.stderr
+
+    if "# PerfLab compare v0" not in output:
+        fail("Markdown compare output missing header!")
+    if "## Phase comparison:" not in output:
+        fail("Markdown compare output missing phase comparison!")
+    if "baseline spread" not in output:
+        fail("Markdown compare output missing baseline spread!")
+    if "candidate spread" not in output:
+        fail("Markdown compare output missing candidate spread!")
+
+    if expect_perf:
+        if "## Perf comparison:" not in output:
+            fail("Markdown compare output missing perf comparison!")
+        if "cpu_core/cycles/u" not in output:
+            fail("Markdown compare output missing cpu_core/cycles/u!")
+        if "cpu_core/instructions/u" not in output:
+            fail("Markdown compare output missing cpu_core/instructions/u!")
+    else:
+        if "perf unavailable" not in err_out:
+            fail("Markdown compare stderr did not report summary.perf unavailable!")
+        if "perf unavailable" in output:
+            fail("Markdown compare stdout contains summary.perf unavailable warning!")
+
 
 def validate_compare_output_format_csv(compare_output, expect_perf):
     output = compare_output.stdout
@@ -248,8 +317,8 @@ def validate_compare_output_format_csv(compare_output, expect_perf):
     if "candidate:" in output:
         fail("CSV compare output contains candidate path!")
 
-    if "kind,name,baseline,candidate,delta,delta_percent" not in output:
-        fail("CSV compare output missing header!")
+    if "kind,name,baseline,candidate,delta,delta_percent,baseline_spread_percent,candidate_spread_percent" not in output:
+        fail("CSV compare output missing header/noise columns!")
     if "phase,init," not in output:
         fail("CSV compare output missing init phase comparison!")
     if "phase,compute," not in output:
@@ -268,8 +337,10 @@ def validate_compare_output_format_csv(compare_output, expect_perf):
         if "perf,cpu_core/instructions/u," in output:
             fail("CSV compare output contains perf,cpu_core/instructions/u!")
         if "perf unavailable" not in err_out:
-            fail("CSV compare output did not report summary.perf unavailable!")
-        
+            fail("CSV compare stderr did not report summary.perf unavailable!")
+        if "perf unavailable" in output:
+            fail("CSV compare stdout contains summary.perf unavailable warning!")
+
 
 def compare_results(perflab_root_dir, baseline, candidate, expect_perf):
     baseline_rel = rel_to_root(perflab_root_dir, baseline)
@@ -279,6 +350,11 @@ def compare_results(perflab_root_dir, baseline, candidate, expect_perf):
     cmd = f"cargo run -- compare {baseline_rel} {candidate_rel}"
     compare_output = run_cmd_capture(cmd)
     validate_compare_output_format_text(compare_output, expect_perf)
+
+    print(f'Comparing markdown format...')
+    cmd = f"cargo run -- compare {baseline_rel} {candidate_rel} --format markdown"
+    compare_output = run_cmd_capture(cmd)
+    validate_compare_output_format_markdown(compare_output, expect_perf)
 
     print(f'Comparing csv format...')
     cmd = f"cargo run -- compare {baseline_rel} {candidate_rel} --format csv"

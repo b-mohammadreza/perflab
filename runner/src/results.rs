@@ -20,7 +20,7 @@ pub fn create_result_obj(
 
     let runner_json = types::RunnerJson {
         meta: types::Meta {
-            schema_version: 1,
+            schema_version: 2,
             cpu_pin: runner_args.cpu,
             warmup: runner_args.warmup.unwrap_or(1u32),
             reps: runner_args.reps.unwrap_or(5u32),

@@ -17,7 +17,7 @@ pub struct RunSample {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Summary {
-    pub phases_ns: BenchPhasesNs,
+    pub phases_ns: SummaryPhasesNs,
     pub perf: Option<PerfEvents>,
 }
 
@@ -72,6 +72,21 @@ pub struct BenchPhasesNs {
     pub compute: u64,
     pub init: u64,
     pub teardown: u64,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SummaryPhasesNs {
+    pub compute: SummaryAttributes,
+    pub init: SummaryAttributes,
+    pub teardown: SummaryAttributes,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SummaryAttributes {
+    pub median_ns: u64,
+    pub min_ns: u64,
+    pub max_ns: u64,
+    pub spread_percent: Option<f64>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -150,6 +165,8 @@ pub struct CmpItemData {
     pub candidate: u64,
     pub abs_delta: String,
     pub percent_delta: String,
+    pub baseline_spread: String,
+    pub candidate_spread: String,
 }
 
 /// To store global comparison data and pass its reference to indivisual renderers

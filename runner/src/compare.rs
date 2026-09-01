@@ -302,44 +302,50 @@ fn get_cmp_g_data(
 
     cmp_g_data.init_phase = types::CmpItemData {
         item_name: String::from("init"),
-        baseline: baseline.summary.phases_ns.init,
-        candidate: candidate.summary.phases_ns.init,
+        baseline: baseline.summary.phases_ns.init.median_ns,
+        candidate: candidate.summary.phases_ns.init.median_ns,
         abs_delta: get_abs_delta(
-            baseline.summary.phases_ns.init,
-            candidate.summary.phases_ns.init,
+            baseline.summary.phases_ns.init.median_ns,
+            candidate.summary.phases_ns.init.median_ns,
         ),
         percent_delta: get_percent_delta(
-            baseline.summary.phases_ns.init,
-            candidate.summary.phases_ns.init,
+            baseline.summary.phases_ns.init.median_ns,
+            candidate.summary.phases_ns.init.median_ns,
         ),
+        baseline_spread: get_spread_percent(baseline.summary.phases_ns.init.spread_percent),
+        candidate_spread: get_spread_percent(candidate.summary.phases_ns.init.spread_percent),
     };
 
     cmp_g_data.compute_phase = types::CmpItemData {
         item_name: String::from("compute"),
-        baseline: baseline.summary.phases_ns.compute,
-        candidate: candidate.summary.phases_ns.compute,
+        baseline: baseline.summary.phases_ns.compute.median_ns,
+        candidate: candidate.summary.phases_ns.compute.median_ns,
         abs_delta: get_abs_delta(
-            baseline.summary.phases_ns.compute,
-            candidate.summary.phases_ns.compute,
+            baseline.summary.phases_ns.compute.median_ns,
+            candidate.summary.phases_ns.compute.median_ns,
         ),
         percent_delta: get_percent_delta(
-            baseline.summary.phases_ns.compute,
-            candidate.summary.phases_ns.compute,
+            baseline.summary.phases_ns.compute.median_ns,
+            candidate.summary.phases_ns.compute.median_ns,
         ),
+        baseline_spread: get_spread_percent(baseline.summary.phases_ns.compute.spread_percent),
+        candidate_spread: get_spread_percent(candidate.summary.phases_ns.compute.spread_percent),
     };
 
     cmp_g_data.tear_down_phase = types::CmpItemData {
         item_name: String::from("teardown"),
-        baseline: baseline.summary.phases_ns.teardown,
-        candidate: candidate.summary.phases_ns.teardown,
+        baseline: baseline.summary.phases_ns.teardown.median_ns,
+        candidate: candidate.summary.phases_ns.teardown.median_ns,
         abs_delta: get_abs_delta(
-            baseline.summary.phases_ns.teardown,
-            candidate.summary.phases_ns.teardown,
+            baseline.summary.phases_ns.teardown.median_ns,
+            candidate.summary.phases_ns.teardown.median_ns,
         ),
         percent_delta: get_percent_delta(
-            baseline.summary.phases_ns.teardown,
-            candidate.summary.phases_ns.teardown,
+            baseline.summary.phases_ns.teardown.median_ns,
+            candidate.summary.phases_ns.teardown.median_ns,
         ),
+        baseline_spread: get_spread_percent(baseline.summary.phases_ns.teardown.spread_percent),
+        candidate_spread: get_spread_percent(candidate.summary.phases_ns.teardown.spread_percent),
     };
 
     verify_summary_perf_avail(&mut cmp_g_data, baseline, candidate);
@@ -354,6 +360,8 @@ fn get_cmp_g_data(
                 candidate: event.candidate,
                 abs_delta: get_abs_delta(event.baseline, event.candidate),
                 percent_delta: get_percent_delta(event.baseline, event.candidate),
+                baseline_spread: String::from(""),
+                candidate_spread: String::from(""),
             });
         }
     }
@@ -413,11 +421,18 @@ fn get_abs_delta(baseline_phase: u64, candidate_phase: u64) -> String {
 
 fn get_percent_delta(baseline_phase: u64, candidate_phase: u64) -> String {
     match baseline_phase {
-        0 => "N/A".to_string(),
+        0 => String::from("N/A"),
         _ => format!(
             "{:+.2}%",
-            ((candidate_phase as f64 - baseline_phase as f64) / baseline_phase as f64 * 100 as f64)
+            ((candidate_phase as f64 - baseline_phase as f64) / baseline_phase as f64 * 100.0)
         ),
+    }
+}
+
+fn get_spread_percent(spread: Option<f64>) -> String {
+    match spread {
+        None => String::from("null"),
+        Some(val) => format!("{:.2}%", val),
     }
 }
 
@@ -445,6 +460,8 @@ impl types::CmpGData {
                 candidate: 0u64,
                 abs_delta: String::from(""),
                 percent_delta: String::from(""),
+                baseline_spread: String::from(""),
+                candidate_spread: String::from(""),
             },
             compute_phase: types::CmpItemData {
                 item_name: String::from(""),
@@ -452,6 +469,8 @@ impl types::CmpGData {
                 candidate: 0u64,
                 abs_delta: String::from(""),
                 percent_delta: String::from(""),
+                baseline_spread: String::from(""),
+                candidate_spread: String::from(""),
             },
             tear_down_phase: types::CmpItemData {
                 item_name: String::from(""),
@@ -459,6 +478,8 @@ impl types::CmpGData {
                 candidate: 0u64,
                 abs_delta: String::from(""),
                 percent_delta: String::from(""),
+                baseline_spread: String::from(""),
+                candidate_spread: String::from(""),
             },
             perf_unavail: false,
             perf_events_unavail: false,
@@ -479,62 +500,69 @@ impl<'cmp_g> types::CmpRenderer for types::TextCmpRenderer<'cmp_g> {
     }
 
     fn render_summary_phases(&self) {
-        const INDENT_LEN: usize = 30;
+        const INDENT_LEN: usize = 25;
 
         println!("Phase comparison:");
         println!(
-            "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
+            "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
             "phase",
             "baseline(ns)",
             "candidate(ns)",
             "delta(ns)",
             "delta(%)",
+            "baseline spread",
+            "candidate spread",
             w = INDENT_LEN
         );
         println!(
-            "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
+            "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
             self.cmp_g_data.init_phase.item_name,
             self.cmp_g_data.init_phase.baseline,
             self.cmp_g_data.init_phase.candidate,
             self.cmp_g_data.init_phase.abs_delta,
             self.cmp_g_data.init_phase.percent_delta,
+            self.cmp_g_data.init_phase.baseline_spread,
+            self.cmp_g_data.init_phase.candidate_spread,
             w = INDENT_LEN
         );
         println!(
-            "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
+            "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
             self.cmp_g_data.compute_phase.item_name,
             self.cmp_g_data.compute_phase.baseline,
             self.cmp_g_data.compute_phase.candidate,
             self.cmp_g_data.compute_phase.abs_delta,
             self.cmp_g_data.compute_phase.percent_delta,
+            self.cmp_g_data.compute_phase.baseline_spread,
+            self.cmp_g_data.compute_phase.candidate_spread,
             w = INDENT_LEN
         );
         println!(
-            "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
+            "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
             self.cmp_g_data.tear_down_phase.item_name,
             self.cmp_g_data.tear_down_phase.baseline,
             self.cmp_g_data.tear_down_phase.candidate,
             self.cmp_g_data.tear_down_phase.abs_delta,
             self.cmp_g_data.tear_down_phase.percent_delta,
+            self.cmp_g_data.tear_down_phase.baseline_spread,
+            self.cmp_g_data.tear_down_phase.candidate_spread,
             w = INDENT_LEN
         );
         println!("");
     }
 
     fn render_summary_perf(&self) {
-        const INDENT_LEN: usize = 30;
-
-        println!("Perf comparison:");
+        const INDENT_LEN: usize = 25;
 
         if self.cmp_g_data.perf_unavail {
-            println!(
+            eprintln!(
                 "perflab-compare-warning: perf unavailable, perf data is unavailable in one or both inputs"
             );
         } else if self.cmp_g_data.perf_events_unavail {
-            println!(
+            eprintln!(
                 "perflab-compare-error: perf unavailable, perf events are unavailable in one or both inputs"
             );
         } else {
+            println!("Perf comparison:");
             println!(
                 "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
                 "event",
@@ -574,48 +602,59 @@ impl<'cmp_g> types::CmpRenderer for types::MarkdownCmpRenderer<'cmp_g> {
     fn render_summary_phases(&self) {
         println!("## Phase comparison:");
         println!(
-            "| {} | {} | {} | {} | {} |\n|---|---:|---:|---:|---:|",
-            "phase", "baseline(ns)", "candidate(ns)", "delta(ns)", "delta(%)"
+            "| {} | {} | {} | {} | {} | {} | {} |\n|---|---:|---:|---:|---:|---:|---:|",
+            "phase",
+            "baseline(ns)",
+            "candidate(ns)",
+            "delta(ns)",
+            "delta(%)",
+            "baseline spread",
+            "candidate spread"
         );
         println!(
-            "| {} | {} | {} | {} | {} |",
+            "| {} | {} | {} | {} | {} | {} | {} |",
             self.cmp_g_data.init_phase.item_name,
             self.cmp_g_data.init_phase.baseline,
             self.cmp_g_data.init_phase.candidate,
             self.cmp_g_data.init_phase.abs_delta,
             self.cmp_g_data.init_phase.percent_delta,
+            self.cmp_g_data.init_phase.baseline_spread,
+            self.cmp_g_data.init_phase.candidate_spread,
         );
         println!(
-            "| {} | {} | {} | {} | {} |",
+            "| {} | {} | {} | {} | {} | {} | {} |",
             self.cmp_g_data.compute_phase.item_name,
             self.cmp_g_data.compute_phase.baseline,
             self.cmp_g_data.compute_phase.candidate,
             self.cmp_g_data.compute_phase.abs_delta,
             self.cmp_g_data.compute_phase.percent_delta,
+            self.cmp_g_data.compute_phase.baseline_spread,
+            self.cmp_g_data.compute_phase.candidate_spread,
         );
         println!(
-            "| {} | {} | {} | {} | {} |",
+            "| {} | {} | {} | {} | {} | {} | {} |",
             self.cmp_g_data.tear_down_phase.item_name,
             self.cmp_g_data.tear_down_phase.baseline,
             self.cmp_g_data.tear_down_phase.candidate,
             self.cmp_g_data.tear_down_phase.abs_delta,
             self.cmp_g_data.tear_down_phase.percent_delta,
+            self.cmp_g_data.tear_down_phase.baseline_spread,
+            self.cmp_g_data.tear_down_phase.candidate_spread,
         );
         println!("");
     }
 
     fn render_summary_perf(&self) {
-        println!("## Perf comparison:");
-
         if self.cmp_g_data.perf_unavail {
-            println!(
+            eprintln!(
                 "perflab-compare-warning: perf unavailable, perf data is unavailable in one or both inputs"
             );
         } else if self.cmp_g_data.perf_events_unavail {
-            println!(
+            eprintln!(
                 "perflab-compare-error: perf unavailable, perf events are unavailable in one or both inputs"
             );
         } else {
+            println!("## Perf comparison:");
             println!(
                 "| {} | {} | {} | {} | {} |\n|---|---:|---:|---:|---:|",
                 "event", "baseline", "candidate", "delta", "delta(%)"
@@ -637,36 +676,44 @@ impl<'cmp_g> types::CmpRenderer for types::MarkdownCmpRenderer<'cmp_g> {
 
 impl<'cmp_g> types::CmpRenderer for types::CsvCmpRenderer<'cmp_g> {
     fn render_cmp_header(&self) {
-        println!("kind,name,baseline,candidate,delta,delta_percent");
+        println!(
+            "kind,name,baseline,candidate,delta,delta_percent,baseline_spread_percent,candidate_spread_percent"
+        );
     }
 
     fn render_summary_phases(&self) {
         println!(
-            "{},{},{},{},{},{}",
+            "{},{},{},{},{},{},{},{}",
             "phase",
             self.cmp_g_data.init_phase.item_name,
             self.cmp_g_data.init_phase.baseline,
             self.cmp_g_data.init_phase.candidate,
             self.cmp_g_data.init_phase.abs_delta,
             self.cmp_g_data.init_phase.percent_delta,
+            self.cmp_g_data.init_phase.baseline_spread,
+            self.cmp_g_data.init_phase.candidate_spread,
         );
         println!(
-            "{},{},{},{},{},{}",
+            "{},{},{},{},{},{},{},{}",
             "phase",
             self.cmp_g_data.compute_phase.item_name,
             self.cmp_g_data.compute_phase.baseline,
             self.cmp_g_data.compute_phase.candidate,
             self.cmp_g_data.compute_phase.abs_delta,
             self.cmp_g_data.compute_phase.percent_delta,
+            self.cmp_g_data.compute_phase.baseline_spread,
+            self.cmp_g_data.compute_phase.candidate_spread,
         );
         println!(
-            "{},{},{},{},{},{}",
+            "{},{},{},{},{},{},{},{}",
             "phase",
             self.cmp_g_data.tear_down_phase.item_name,
             self.cmp_g_data.tear_down_phase.baseline,
             self.cmp_g_data.tear_down_phase.candidate,
             self.cmp_g_data.tear_down_phase.abs_delta,
             self.cmp_g_data.tear_down_phase.percent_delta,
+            self.cmp_g_data.tear_down_phase.baseline_spread,
+            self.cmp_g_data.tear_down_phase.candidate_spread,
         );
     }
 

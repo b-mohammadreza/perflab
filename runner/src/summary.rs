@@ -2,11 +2,11 @@ use crate::types::{self, PerfArrs};
 use num_traits::FromPrimitive;
 use std::{
     collections::HashMap,
-    ops::{Add, Div},
+    ops::{Add, Div, Mul, Sub},
 };
 
 pub fn compute(samples: &types::RunSampleVec) -> types::Summary {
-    let phases_median = get_phases_median(samples);
+    let phases_median = get_phases_agg_attr(samples);
     let perf_median = get_perf_median(samples);
 
     types::Summary {
@@ -15,7 +15,7 @@ pub fn compute(samples: &types::RunSampleVec) -> types::Summary {
     }
 }
 
-fn get_phases_median(samples: &types::RunSampleVec) -> types::BenchPhasesNs {
+fn get_phases_agg_attr(samples: &types::RunSampleVec) -> types::SummaryPhasesNs {
     let mut phases_arrs = types::BenchPhasesArrs {
         compute_arr: Vec::new(),
         init_arr: Vec::new(),
@@ -37,10 +37,10 @@ fn get_phases_median(samples: &types::RunSampleVec) -> types::BenchPhasesNs {
         );
     }
 
-    types::BenchPhasesNs {
-        compute: get_median(&phases_arrs.compute_arr),
-        init: get_median(&phases_arrs.init_arr),
-        teardown: get_median(&phases_arrs.teardown_arr),
+    types::SummaryPhasesNs {
+        compute: types::SummaryAttributes::new(&phases_arrs.compute_arr),
+        init: types::SummaryAttributes::new(&phases_arrs.init_arr),
+        teardown: types::SummaryAttributes::new(&phases_arrs.teardown_arr),
     }
 }
 
@@ -75,6 +75,21 @@ fn get_perf_median(samples: &types::RunSampleVec) -> Option<types::PerfEvents> {
     }
 }
 
+impl types::SummaryAttributes {
+    fn new(arr: &Vec<u64>) -> Self {
+        let median: u64 = get_median(arr);
+        let min: u64 = get_min(arr);
+        let max: u64 = get_max(arr);
+        let spread = get_spread_percent(median as u32, min as u32, max as u32);
+        Self {
+            median_ns: median,
+            min_ns: min,
+            max_ns: max,
+            spread_percent: spread,
+        }
+    }
+}
+
 fn sort_arr<T>(arr: &mut Vec<T>, new_val: T)
 where
     T: Ord,
@@ -96,4 +111,51 @@ where
 
     (arr[mid_index] + arr[mid_index - 1])
         / T::from_u8(2u8).expect("Type T must be able to represent 2u8")
+}
+
+fn get_min<T>(arr: &Vec<T>) -> T
+where
+    T: Ord + Copy + FromPrimitive,
+{
+    if let Some(val) = arr.first() {
+        *val
+    } else {
+        T::from_u8(0u8).expect("Type T must be able to represent 0u8")
+    }
+}
+
+fn get_max<T>(arr: &Vec<T>) -> T
+where
+    T: Ord + Copy + FromPrimitive,
+{
+    if let Some(val) = arr.last() {
+        *val
+    } else {
+        T::from_u8(0u8).expect("Type T must be able to represent 0u8")
+    }
+}
+
+fn get_spread_percent<T>(median: T, min: T, max: T) -> Option<f64>
+where
+    T: Ord
+        + Sub<Output = T>
+        + Div<T, Output = T>
+        + Mul<T, Output = T>
+        + Copy
+        + FromPrimitive
+        + Into<f64>,
+{
+    let zero = T::from_u8(0u8).expect("Type T must be able to represent 0u8");
+
+    if median > zero {
+        let median_f: f64 = median.into();
+        let min_f: f64 = min.into();
+        let max_f: f64 = max.into();
+        let spread: f64 = (max_f - min_f) / median_f * 100.0;
+        Some(spread)
+    } else if median == zero && min == zero && max == zero {
+        Some(0.0)
+    } else {
+        None
+    }
 }
