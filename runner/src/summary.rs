@@ -187,6 +187,7 @@ mod tests {
     #[test]
     fn get_median_test() {
         assert_eq!(110, get_median(&vec![100, 110, 120]));
+        assert_eq!(115, get_median(&vec![100, 110, 120, 130]));
         assert_eq!(100, get_median(&vec![100]));
     }
 
@@ -204,9 +205,30 @@ mod tests {
 
     #[test]
     fn get_spread_percent_test() {
-        if let Some(result) = get_spread_percent(110, 100, 120) {
-            assert_eq!(18.18, (result * 100.0).round() / 100.0);
-        }
+        let result =
+            get_spread_percent(110, 100, 120).expect("expected spread percent to be available");
+        assert_eq!(18.18, (result * 100.0).round() / 100.0);
+
         assert_eq!(Some(0.0), get_spread_percent(100, 100, 100));
+    }
+
+    #[test]
+    fn get_spread_percent_all_zero_test() {
+        assert_eq!(Some(0.0), get_spread_percent(0, 0, 0));
+    }
+
+    #[test]
+    fn get_spread_percent_zero_median_nonzero_range_test() {
+        assert_eq!(None, get_spread_percent(0, 0, 10));
+    }
+
+    #[test]
+    fn summary_attributes_zero_median_nonzero_range_test() {
+        let summary = types::SummaryAttributes::new(&vec![0, 0, 10]);
+
+        assert_eq!(0, summary.median_ns);
+        assert_eq!(0, summary.min_ns);
+        assert_eq!(10, summary.max_ns);
+        assert_eq!(None, summary.spread_percent);
     }
 }
