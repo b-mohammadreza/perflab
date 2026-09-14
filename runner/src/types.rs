@@ -154,6 +154,7 @@ pub enum Format {
     Csv,
 }
 
+#[derive(Debug)]
 pub enum CmpInputSide {
     JsonBaseline,
     JsonCandidate,
@@ -207,6 +208,7 @@ pub struct CsvCmpRenderer<'cmp_g> {
     pub cmp_g_data: &'cmp_g CmpGData,
 }
 
+#[derive(Debug)]
 pub enum CompareError {
     ReadInput {
         input: CmpInputSide,

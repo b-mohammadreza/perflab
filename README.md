@@ -31,4 +31,7 @@ Run the current automated smoke suite with:
 ## Documentation
 Detailed setup, measurement, result-schema, comparison, validation, and testing instructions are in [`docs/USAGE.md`](docs/USAGE.md).
 ## Testing status
-`./scripts/smoke.py` is currently the project’s automated test suite. Rust unit and integration tests have not been added yet.
+PerfLab uses layered automated testing:
+- Rust unit tests cover internal comparison logic, input validation, deserialization, compatibility checks, and summary/noise-metric behavior.
+- Rust integration tests exercise CLI behavior and representative fatal compare failures.
+- `./scripts/smoke.py` provides end-to-end coverage with real benchmark runs, generated result files, perf/no-perf flows, and text, Markdown, and CSV comparison output.

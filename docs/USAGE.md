@@ -192,19 +192,30 @@ Suggested layout:
 ```
 Add `.work/` to `.gitignore` before using it.
 ## Automated testing
-The current automated test entry point is:
+PerfLab uses three levels of automated testing.
+### Rust unit tests
+Unit tests cover internal logic including:
+- compare delta and spread formatting
+- required-field validation
+- path-aware typed deserialization failures
+- schema and benchmark compatibility checks
+- input read failures
+- median, minimum, maximum, and spread calculations
+- zero-median spread behavior
+- schema-v2 numeric/null spread representation
+Run them with:
+```bash
+cargo test -p perflab
+```
+### Rust CLI integration tests
+Integration tests under `runner/tests/` exercise the built `perflab` command-line interface, including representative fatal compare failures and exit/error behavior.
+Run the compare integration tests with:
+```bash
+cargo test -p perflab --test compare_cli
+```
+### End-to-end smoke testing
+Run the end-to-end suite with:
 ```bash
 ./scripts/smoke.py
 ```
-`smoke.py` is currently the only automated project test suite. There is no Rust unit or integration test module yet.
-The current smoke suite validates:
-- generated result `schema_version == 2`
-- phase summaries for `init`, `compute`, and `teardown`
-- `median_ns`, `min_ns`, `max_ns`, and `spread_percent`
-- `min_ns <= median_ns <= max_ns`
-- `spread_percent` is numeric or `null` and never negative when present
-- successful text, Markdown, and CSV comparison
-- baseline and candidate spread output
-- performance-counter and no-performance-counter comparison paths
-- unavailable-performance-counter warnings on standard error
-Additional focused Rust unit/integration tests are planned for comparison, validation, schema behavior, and exit semantics.
+The smoke suite intentionally stays broader and smaller than the Rust tests. It exercises real benchmark runs, generated JSON results, perf and no-perf flows, and successful comparison output in text, Markdown, and CSV formats. Detailed validation and error-path cases belong primarily in the Rust unit and integration tests rather than being duplicated in the smoke suite.

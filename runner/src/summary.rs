@@ -98,10 +98,16 @@ where
     arr.insert(index, new_val);
 }
 
+/// Returns the median of a sorted slice.
+///
+/// # Preconditions
+/// `arr` must be sorted in ascending order.
 fn get_median<T>(arr: &Vec<T>) -> T
 where
     T: Ord + Add<Output = T> + Div<T, Output = T> + Copy + FromPrimitive,
 {
+    debug_assert!(arr.is_sorted());
+
     let arr_len = arr.len();
     let mid_index = arr_len / 2;
 
@@ -113,10 +119,16 @@ where
         / T::from_u8(2u8).expect("Type T must be able to represent 2u8")
 }
 
+/// Returns the min of a sorted slice.
+///
+/// # Preconditions
+/// `arr` must be sorted in ascending order.
 fn get_min<T>(arr: &Vec<T>) -> T
 where
     T: Ord + Copy + FromPrimitive,
 {
+    debug_assert!(arr.is_sorted());
+
     if let Some(val) = arr.first() {
         *val
     } else {
@@ -124,10 +136,16 @@ where
     }
 }
 
+/// Returns the max of a sorted slice.
+///
+/// # Preconditions
+/// `arr` must be sorted in ascending order.
 fn get_max<T>(arr: &Vec<T>) -> T
 where
     T: Ord + Copy + FromPrimitive,
 {
+    debug_assert!(arr.is_sorted());
+
     if let Some(val) = arr.last() {
         *val
     } else {
@@ -157,5 +175,125 @@ where
         Some(0.0)
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::assert_eq;
+
+    use super::*;
+
+    #[test]
+    fn get_median_test() {
+        assert_eq!(110, get_median(&vec![100, 110, 120]));
+        assert_eq!(115, get_median(&vec![100, 110, 120, 130]));
+        assert_eq!(100, get_median(&vec![100]));
+    }
+
+    #[test]
+    fn get_min_test() {
+        assert_eq!(100, get_min(&vec![100, 110, 120]));
+        assert_eq!(100, get_min(&vec![100]));
+    }
+
+    #[test]
+    fn get_max_test() {
+        assert_eq!(120, get_max(&vec![100, 110, 120]));
+        assert_eq!(100, get_max(&vec![100]));
+    }
+
+    #[test]
+    fn get_spread_percent_test() {
+        let result =
+            get_spread_percent(110, 100, 120).expect("expected spread percent to be available");
+        assert_eq!(18.18, (result * 100.0).round() / 100.0);
+
+        assert_eq!(Some(0.0), get_spread_percent(100, 100, 100));
+    }
+
+    #[test]
+    fn get_spread_percent_all_zero_test() {
+        assert_eq!(Some(0.0), get_spread_percent(0, 0, 0));
+    }
+
+    #[test]
+    fn get_spread_percent_zero_median_nonzero_range_test() {
+        assert_eq!(None, get_spread_percent(0, 0, 10));
+    }
+
+    #[test]
+    fn summary_attributes_zero_median_nonzero_range_test() {
+        let summary = types::SummaryAttributes::new(&vec![0, 0, 10]);
+
+        assert_eq!(0, summary.median_ns);
+        assert_eq!(0, summary.min_ns);
+        assert_eq!(10, summary.max_ns);
+        assert_eq!(None, summary.spread_percent);
+    }
+
+    #[test]
+    fn summary_attributes_numeric_spread_serialization_test() {
+        let summary = types::SummaryAttributes {
+            median_ns: 110,
+            min_ns: 100,
+            max_ns: 120,
+            spread_percent: Some(18.18),
+        };
+
+        let json_val =
+            serde_json::to_value(&summary).expect("failed to serialize SummaryAttributes");
+
+        let spread = json_val
+            .pointer("/spread_percent")
+            .expect("spread_percent must exist in serialized SummaryAttributes");
+
+        assert!(spread.is_number());
+        assert_eq!(Some(18.18), spread.as_f64());
+    }
+
+    #[test]
+    fn summary_attributes_null_spread_serialization_test() {
+        let summary = types::SummaryAttributes {
+            median_ns: 0,
+            min_ns: 0,
+            max_ns: 10,
+            spread_percent: None,
+        };
+
+        let json_val =
+            serde_json::to_value(&summary).expect("failed to serialize SummaryAttributes");
+
+        let spread = json_val
+            .pointer("/spread_percent")
+            .expect("spread_percent must exist in serialized SummaryAttributes");
+
+        assert!(spread.is_null());
+    }
+
+    #[test]
+    fn summary_attributes_spread_deserialization_test() {
+        let numeric_json = serde_json::json!({
+            "median_ns": 110,
+            "min_ns": 100,
+            "max_ns": 120,
+            "spread_percent": 18.18
+        });
+
+        let null_json = serde_json::json!({
+            "median_ns": 0,
+            "min_ns": 0,
+            "max_ns": 10,
+            "spread_percent": null
+        });
+
+        let numeric_summary: types::SummaryAttributes =
+            serde_json::from_value(numeric_json).expect("numeric spread_percent must deserialize");
+
+        let null_summary: types::SummaryAttributes =
+            serde_json::from_value(null_json).expect("null spread_percent must deserialize");
+
+        assert_eq!(Some(18.18), numeric_summary.spread_percent);
+        assert_eq!(None, null_summary.spread_percent);
     }
 }

@@ -741,3 +741,550 @@ impl<'cmp_g> types::CmpRenderer for types::CsvCmpRenderer<'cmp_g> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::assert_eq;
+
+    use super::*;
+
+    fn valid_runner_json_value() -> serde_json::Value {
+        serde_json::json!({
+            "meta": {
+                "schema_version": 2,
+                "cpu_pin": 2,
+                "warmup": 1,
+                "reps": 3,
+                "timestamp": "09-14-2026T12-00-00-000",
+                "git_sha": "test-sha",
+                "compiler": {
+                    "path": "clang++",
+                    "version": "test-version"
+                },
+                "uname": "test-uname",
+                "bench": "matmul",
+                "compiler_args": ["-O3"],
+                "command": ["perflab", "run"],
+                "workdir": "/test/workdir",
+                "perf_events_requested": null,
+                "perf_stat_base_args": null
+            },
+            "samples": [],
+            "summary": {
+                "phases_ns": {
+                    "init": {
+                        "median_ns": 100,
+                        "min_ns": 90,
+                        "max_ns": 110,
+                        "spread_percent": 20.0
+                    },
+                    "compute": {
+                        "median_ns": 1000,
+                        "min_ns": 950,
+                        "max_ns": 1050,
+                        "spread_percent": 10.0
+                    },
+                    "teardown": {
+                        "median_ns": 50,
+                        "min_ns": 45,
+                        "max_ns": 55,
+                        "spread_percent": 20.0
+                    }
+                },
+                "perf": null
+            }
+        })
+    }
+
+    #[test]
+    fn get_abs_delta_test() {
+        assert_eq!(String::from("+20"), get_abs_delta(100, 120));
+        assert_eq!(String::from("-20"), get_abs_delta(120, 100));
+        assert_eq!(String::from("+0"), get_abs_delta(100, 100));
+    }
+
+    #[test]
+    fn get_percent_delta_test() {
+        assert_eq!(String::from("+20.00%"), get_percent_delta(100, 120));
+        assert_eq!(String::from("-20.00%"), get_percent_delta(100, 80));
+        assert_eq!(String::from("+0.00%"), get_percent_delta(100, 100));
+        assert_eq!(String::from("N/A"), get_percent_delta(0, 100));
+    }
+
+    #[test]
+    fn get_spread_percent_test() {
+        assert_eq!(String::from("1.23%"), get_spread_percent(Some(1.234)));
+        assert_eq!(String::from("0.00%"), get_spread_percent(Some(0.0)));
+        assert_eq!(String::from("null"), get_spread_percent(None));
+    }
+
+    #[test]
+    fn verify_required_structure_valid_test() {
+        let json_val = serde_json::json!({
+            "meta": {
+                "schema_version": 2,
+                "bench": "matmul"
+            },
+            "summary": {
+                "phases_ns": {
+                    "init": {},
+                    "compute": {},
+                    "teardown": {}
+                },
+                "perf": null
+            }
+        });
+
+        let result = verify_required_structure(&json_val, types::CmpInputSide::JsonBaseline);
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn verify_required_structure_missing_fields_test() {
+        let cases = [
+            (
+                serde_json::json!({
+                    "meta": {
+                        "bench": "matmul"
+                    },
+                    "summary": {
+                        "phases_ns": {
+                            "init": {},
+                            "compute": {},
+                            "teardown": {}
+                        },
+                        "perf": null
+                    }
+                }),
+                "meta.schema_version",
+            ),
+            (
+                serde_json::json!({
+                    "meta": {
+                        "schema_version": 2
+                    },
+                    "summary": {
+                        "phases_ns": {
+                            "init": {},
+                            "compute": {},
+                            "teardown": {}
+                        },
+                        "perf": null
+                    }
+                }),
+                "meta.bench",
+            ),
+            (
+                serde_json::json!({
+                    "meta": {
+                        "schema_version": 2,
+                        "bench": "matmul"
+                    },
+                    "summary": {
+                        "perf": null
+                    }
+                }),
+                "summary.phases_ns",
+            ),
+            (
+                serde_json::json!({
+                    "meta": {
+                        "schema_version": 2,
+                        "bench": "matmul"
+                    },
+                    "summary": {
+                        "phases_ns": {
+                            "compute": {},
+                            "teardown": {}
+                        },
+                        "perf": null
+                    }
+                }),
+                "summary.phases_ns.init",
+            ),
+            (
+                serde_json::json!({
+                    "meta": {
+                        "schema_version": 2,
+                        "bench": "matmul"
+                    },
+                    "summary": {
+                        "phases_ns": {
+                            "init": {},
+                            "teardown": {}
+                        },
+                        "perf": null
+                    }
+                }),
+                "summary.phases_ns.compute",
+            ),
+            (
+                serde_json::json!({
+                    "meta": {
+                        "schema_version": 2,
+                        "bench": "matmul"
+                    },
+                    "summary": {
+                        "phases_ns": {
+                            "init": {},
+                            "compute": {}
+                        },
+                        "perf": null
+                    }
+                }),
+                "summary.phases_ns.teardown",
+            ),
+            (
+                serde_json::json!({
+                    "meta": {
+                        "schema_version": 2,
+                        "bench": "matmul"
+                    },
+                    "summary": {
+                        "phases_ns": {
+                            "init": {},
+                            "compute": {},
+                            "teardown": {}
+                        }
+                    }
+                }),
+                "summary.perf",
+            ),
+        ];
+
+        for (json_val, expected_field) in cases {
+            let result = verify_required_structure(&json_val, types::CmpInputSide::JsonBaseline);
+
+            match result {
+                Err(types::CompareError::MissingRequiredField { input, field }) => {
+                    assert!(matches!(input, types::CmpInputSide::JsonBaseline));
+                    assert_eq!(field, expected_field);
+                }
+                Ok(()) => panic!("expected missing required field error"),
+                Err(other) => panic!("unexpected compare error: {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn verify_required_structure_missing_perf_events_test() {
+        let json_val = serde_json::json!({
+            "meta": {
+                "schema_version": 2,
+                "bench": "matmul"
+            },
+            "summary": {
+                "phases_ns": {
+                    "init": {},
+                    "compute": {},
+                    "teardown": {}
+                },
+                "perf": {}
+            }
+        });
+
+        let result = verify_required_structure(&json_val, types::CmpInputSide::JsonCandidate);
+
+        match result {
+            Err(types::CompareError::MissingRequiredField { input, field }) => {
+                assert!(matches!(input, types::CmpInputSide::JsonCandidate));
+                assert_eq!(field, "summary.perf.events");
+            }
+            Ok(()) => panic!("expected missing perf events error"),
+            Err(other) => panic!("unexpected compare error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn verify_required_structure_with_perf_events_test() {
+        let json_val = serde_json::json!({
+            "meta": {
+                "schema_version": 2,
+                "bench": "matmul"
+            },
+            "summary": {
+                "phases_ns": {
+                    "init": {},
+                    "compute": {},
+                    "teardown": {}
+                },
+                "perf": {
+                    "events": {}
+                }
+            }
+        });
+
+        let result = verify_required_structure(&json_val, types::CmpInputSide::JsonBaseline);
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn get_runner_json_wrong_schema_version_type_test() {
+        let mut json_val = valid_runner_json_value();
+        *json_val
+            .pointer_mut("/meta/schema_version")
+            .expect("schema_version must exist in valid test JSON") = serde_json::json!("2");
+
+        let json_data = serde_json::to_string(&json_val).expect("failed to serialize test JSON");
+        let json_path = PathBuf::from("baseline.json");
+
+        let result = get_runner_json(
+            &json_data,
+            json_path.clone(),
+            types::CmpInputSide::JsonBaseline,
+        );
+
+        match result {
+            Err(types::CompareError::Deserialize {
+                input,
+                path,
+                source,
+            }) => {
+                assert!(matches!(input, types::CmpInputSide::JsonBaseline));
+                assert_eq!(path, json_path);
+                assert_eq!(source.path().to_string(), "meta.schema_version");
+            }
+            Ok(_) => panic!("expected typed deserialization error"),
+            Err(other) => panic!("unexpected compare error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn get_runner_json_wrong_compute_median_type_test() {
+        let mut json_val = valid_runner_json_value();
+        *json_val
+            .pointer_mut("/summary/phases_ns/compute/median_ns")
+            .expect("compute median_ns must exist in valid test JSON") = serde_json::json!("1000");
+
+        let json_data = serde_json::to_string(&json_val).expect("failed to serialize test JSON");
+        let json_path = PathBuf::from("candidate.json");
+
+        let result = get_runner_json(
+            &json_data,
+            json_path.clone(),
+            types::CmpInputSide::JsonCandidate,
+        );
+
+        match result {
+            Err(types::CompareError::Deserialize {
+                input,
+                path,
+                source,
+            }) => {
+                assert!(matches!(input, types::CmpInputSide::JsonCandidate));
+                assert_eq!(path, json_path);
+                assert_eq!(
+                    source.path().to_string(),
+                    "summary.phases_ns.compute.median_ns"
+                );
+            }
+            Ok(_) => panic!("expected typed deserialization error"),
+            Err(other) => panic!("unexpected compare error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn get_runner_json_wrong_compute_spread_type_test() {
+        let mut json_val = valid_runner_json_value();
+        *json_val
+            .pointer_mut("/summary/phases_ns/compute/spread_percent")
+            .expect("compute spread_percent must exist in valid test JSON") =
+            serde_json::json!("10.0");
+
+        let json_data = serde_json::to_string(&json_val).expect("failed to serialize test JSON");
+        let json_path = PathBuf::from("candidate.json");
+
+        let result = get_runner_json(
+            &json_data,
+            json_path.clone(),
+            types::CmpInputSide::JsonCandidate,
+        );
+
+        match result {
+            Err(types::CompareError::Deserialize {
+                input,
+                path,
+                source,
+            }) => {
+                assert!(matches!(input, types::CmpInputSide::JsonCandidate));
+                assert_eq!(path, json_path);
+                assert_eq!(
+                    source.path().to_string(),
+                    "summary.phases_ns.compute.spread_percent"
+                );
+            }
+            Ok(_) => panic!("expected typed deserialization error"),
+            Err(other) => panic!("unexpected compare error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn verify_required_schema_mismatch_test() {
+        let baseline_json = valid_runner_json_value();
+        let mut candidate_json = valid_runner_json_value();
+
+        *candidate_json
+            .pointer_mut("/meta/schema_version")
+            .expect("schema_version must exist in valid test JSON") = serde_json::json!(3);
+
+        let baseline_data =
+            serde_json::to_string(&baseline_json).expect("failed to serialize baseline test JSON");
+        let candidate_data = serde_json::to_string(&candidate_json)
+            .expect("failed to serialize candidate test JSON");
+
+        let baseline = get_runner_json(
+            &baseline_data,
+            PathBuf::from("baseline.json"),
+            types::CmpInputSide::JsonBaseline,
+        )
+        .expect("baseline test JSON must deserialize");
+
+        let candidate = get_runner_json(
+            &candidate_data,
+            PathBuf::from("candidate.json"),
+            types::CmpInputSide::JsonCandidate,
+        )
+        .expect("candidate test JSON must deserialize");
+
+        let result = verify_required(&baseline, &candidate);
+
+        match result {
+            Err(types::CompareError::SchemaMismatch {
+                baseline_ver,
+                candidate_ver,
+            }) => {
+                assert_eq!(baseline_ver, 2);
+                assert_eq!(candidate_ver, 3);
+            }
+            Ok(()) => panic!("expected schema mismatch error"),
+            Err(other) => panic!("unexpected compare error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn verify_required_benchmark_mismatch_test() {
+        let baseline_json = valid_runner_json_value();
+        let mut candidate_json = valid_runner_json_value();
+
+        *candidate_json
+            .pointer_mut("/meta/bench")
+            .expect("bench must exist in valid test JSON") = serde_json::json!("reduce");
+
+        let baseline_data =
+            serde_json::to_string(&baseline_json).expect("failed to serialize baseline test JSON");
+        let candidate_data = serde_json::to_string(&candidate_json)
+            .expect("failed to serialize candidate test JSON");
+
+        let baseline = get_runner_json(
+            &baseline_data,
+            PathBuf::from("baseline.json"),
+            types::CmpInputSide::JsonBaseline,
+        )
+        .expect("baseline test JSON must deserialize");
+
+        let candidate = get_runner_json(
+            &candidate_data,
+            PathBuf::from("candidate.json"),
+            types::CmpInputSide::JsonCandidate,
+        )
+        .expect("candidate test JSON must deserialize");
+
+        let result = verify_required(&baseline, &candidate);
+
+        match result {
+            Err(types::CompareError::BenchmarkMismatch {
+                baseline_bench,
+                candidate_bench,
+            }) => {
+                assert_eq!(baseline_bench, "matmul");
+                assert_eq!(candidate_bench, "reduce");
+            }
+            Ok(()) => panic!("expected benchmark mismatch error"),
+            Err(other) => panic!("unexpected compare error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn verify_required_matching_inputs_test() {
+        let baseline_json = valid_runner_json_value();
+        let candidate_json = valid_runner_json_value();
+
+        let baseline_data =
+            serde_json::to_string(&baseline_json).expect("failed to serialize baseline test JSON");
+        let candidate_data = serde_json::to_string(&candidate_json)
+            .expect("failed to serialize candidate test JSON");
+
+        let baseline = get_runner_json(
+            &baseline_data,
+            PathBuf::from("baseline.json"),
+            types::CmpInputSide::JsonBaseline,
+        )
+        .expect("baseline test JSON must deserialize");
+
+        let candidate = get_runner_json(
+            &candidate_data,
+            PathBuf::from("candidate.json"),
+            types::CmpInputSide::JsonCandidate,
+        )
+        .expect("candidate test JSON must deserialize");
+
+        let result = verify_required(&baseline, &candidate);
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn get_json_str_missing_inputs_test() {
+        let cases = [
+            (
+                PathBuf::from("/definitely/missing/perflab-baseline.json"),
+                true,
+            ),
+            (
+                PathBuf::from("/definitely/missing/perflab-candidate.json"),
+                false,
+            ),
+        ];
+
+        for (json_path, is_baseline) in cases {
+            let input_side = if is_baseline {
+                types::CmpInputSide::JsonBaseline
+            } else {
+                types::CmpInputSide::JsonCandidate
+            };
+
+            let result = get_json_str(json_path.clone(), input_side);
+
+            match result {
+                Err(types::CompareError::ReadInput { input, path, .. }) => {
+                    assert_eq!(path, json_path);
+
+                    if is_baseline {
+                        assert!(matches!(input, types::CmpInputSide::JsonBaseline));
+                    } else {
+                        assert!(matches!(input, types::CmpInputSide::JsonCandidate));
+                    }
+                }
+                Ok(_) => panic!("expected input read error"),
+                Err(other) => panic!("unexpected compare error: {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn get_json_str_directory_path_test() {
+        let dir_path = PathBuf::from("runner");
+        let result = get_json_str(dir_path.clone(), types::CmpInputSide::JsonBaseline);
+
+        match result {
+            Err(types::CompareError::ReadInput { input, path, .. }) => {
+                assert!(matches!(input, types::CmpInputSide::JsonBaseline));
+                assert_eq!(path, dir_path);
+            }
+            Ok(_) => panic!("expected input read error for directory path"),
+            Err(other) => panic!("unexpected compare error: {other:?}"),
+        }
+    }
+}
