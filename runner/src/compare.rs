@@ -741,3 +741,81 @@ impl<'cmp_g> types::CmpRenderer for types::CsvCmpRenderer<'cmp_g> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::assert_eq;
+
+    use super::*;
+
+    #[test]
+    fn get_abs_delta_test() {
+        assert_eq!(String::from("+20"), get_abs_delta(100, 120));
+        assert_eq!(String::from("-20"), get_abs_delta(120, 100));
+        assert_eq!(String::from("+0"), get_abs_delta(100, 100));
+    }
+
+    #[test]
+    fn get_percent_delta_test() {
+        assert_eq!(String::from("+20.00%"), get_percent_delta(100, 120));
+        assert_eq!(String::from("-20.00%"), get_percent_delta(100, 80));
+        assert_eq!(String::from("+0.00%"), get_percent_delta(100, 100));
+        assert_eq!(String::from("N/A"), get_percent_delta(0, 100));
+    }
+
+    #[test]
+    fn get_spread_percent_test() {
+        assert_eq!(String::from("1.23%"), get_spread_percent(Some(1.234)));
+        assert_eq!(String::from("0.00%"), get_spread_percent(Some(0.0)));
+        assert_eq!(String::from("null"), get_spread_percent(None));
+    }
+    #[test]
+    fn verify_required_structure_valid_test() {
+        let json_val = serde_json::json!({
+            "meta": {
+                "schema_version": 2,
+                "bench": "matmul"
+            },
+            "summary": {
+                "phases_ns": {
+                    "init": {},
+                    "compute": {},
+                    "teardown": {}
+                },
+                "perf": null
+            }
+        });
+
+        let result = verify_required_structure(&json_val, types::CmpInputSide::JsonBaseline);
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn verify_required_structure_missing_compute_test() {
+        let json_val = serde_json::json!({
+            "meta": {
+                "schema_version": 2,
+                "bench": "matmul"
+            },
+            "summary": {
+                "phases_ns": {
+                    "init": {},
+                    "teardown": {}
+                },
+                "perf": null
+            }
+        });
+
+        let result = verify_required_structure(&json_val, types::CmpInputSide::JsonCandidate);
+
+        match result {
+            Err(types::CompareError::MissingRequiredField { input, field }) => {
+                assert!(matches!(input, types::CmpInputSide::JsonCandidate));
+                assert_eq!(field, "summary.phases_ns.compute");
+            }
+            Ok(()) => panic!("expected missing required field error"),
+            Err(other) => panic!("unexpected compare error: {other:?}"),
+        }
+    }
+}
