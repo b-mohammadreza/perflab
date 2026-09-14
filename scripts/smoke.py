@@ -157,6 +157,9 @@ def validate_result_json(perflab_root_dir, result_json, bench, expect_perf):
 
             ##
             # summary.phases_ns
+            # Keep only end-to-end schema sanity here. Detailed metric correctness,
+            # zero-median behavior, and numeric/null spread behavior are covered by
+            # Rust unit tests.
             ##
             sum_phases = jobject.get("summary").get("phases_ns")
             if sum_phases == None:
@@ -169,42 +172,18 @@ def validate_result_json(perflab_root_dir, result_json, bench, expect_perf):
                 if type(phase_summary) != dict:
                     fail(f"summary.phases_ns.{phase} is not an object!")
 
-                median_ns = phase_summary.get("median_ns")
-                min_ns = phase_summary.get("min_ns")
-                max_ns = phase_summary.get("max_ns")
-                spread_percent = phase_summary.get("spread_percent", "MISSING")
-
-                if median_ns == None:
-                    fail(f"summary.phases_ns.{phase}.median_ns not found!")
-                if min_ns == None:
-                    fail(f"summary.phases_ns.{phase}.min_ns not found!")
-                if max_ns == None:
-                    fail(f"summary.phases_ns.{phase}.max_ns not found!")
-                if spread_percent == "MISSING":
-                    fail(f"summary.phases_ns.{phase}.spread_percent not found!")
-
-                if type(median_ns) != int:
-                    fail(f"summary.phases_ns.{phase}.median_ns is not an integer!")
-                if type(min_ns) != int:
-                    fail(f"summary.phases_ns.{phase}.min_ns is not an integer!")
-                if type(max_ns) != int:
-                    fail(f"summary.phases_ns.{phase}.max_ns is not an integer!")
-
-                if not (min_ns <= median_ns <= max_ns):
-                    fail(f"summary.phases_ns.{phase}: min_ns <= median_ns <= max_ns failed!")
-
-                if spread_percent is not None:
-                    if type(spread_percent) not in (int, float):
-                        fail(f"summary.phases_ns.{phase}.spread_percent is not numeric or null!")
-                    if spread_percent < 0:
-                        fail(f"summary.phases_ns.{phase}.spread_percent is negative!")
+                for field in ["median_ns", "min_ns", "max_ns", "spread_percent"]:
+                    if field not in phase_summary:
+                        fail(f"summary.phases_ns.{phase}.{field} not found!")
 
             sum_ph_compute = sum_phases.get("compute").get("median_ns")
-            if sum_ph_compute <= 0:
-                fail("summary.phases_ns.compute.median_ns is not positive!")
+            if type(sum_ph_compute) != int or sum_ph_compute <= 0:
+                fail("summary.phases_ns.compute.median_ns is not a positive integer!")
 
             if bench == "reduce":
                 sum_ph_init = sum_phases.get("init").get("median_ns")
+                if type(sum_ph_init) != int:
+                    fail("summary.phases_ns.init.median_ns is not an integer!")
                 if sum_ph_compute <= sum_ph_init:
                     fail("reduce: summary.phases_ns.compute.median_ns not greater than summary.phases_ns.init.median_ns!")
 
