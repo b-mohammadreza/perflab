@@ -1126,4 +1126,120 @@ mod tests {
         }
     }
 
+
+    #[test]
+    fn verify_required_schema_mismatch_test() {
+        let baseline_json = valid_runner_json_value();
+        let mut candidate_json = valid_runner_json_value();
+
+        *candidate_json
+            .pointer_mut("/meta/schema_version")
+            .expect("schema_version must exist in valid test JSON") = serde_json::json!(3);
+
+        let baseline_data =
+            serde_json::to_string(&baseline_json).expect("failed to serialize baseline test JSON");
+        let candidate_data =
+            serde_json::to_string(&candidate_json).expect("failed to serialize candidate test JSON");
+
+        let baseline = get_runner_json(
+            &baseline_data,
+            PathBuf::from("baseline.json"),
+            types::CmpInputSide::JsonBaseline,
+        )
+        .expect("baseline test JSON must deserialize");
+
+        let candidate = get_runner_json(
+            &candidate_data,
+            PathBuf::from("candidate.json"),
+            types::CmpInputSide::JsonCandidate,
+        )
+        .expect("candidate test JSON must deserialize");
+
+        let result = verify_required(&baseline, &candidate);
+
+        match result {
+            Err(types::CompareError::SchemaMismatch {
+                baseline_ver,
+                candidate_ver,
+            }) => {
+                assert_eq!(baseline_ver, 2);
+                assert_eq!(candidate_ver, 3);
+            }
+            Ok(()) => panic!("expected schema mismatch error"),
+            Err(other) => panic!("unexpected compare error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn verify_required_benchmark_mismatch_test() {
+        let baseline_json = valid_runner_json_value();
+        let mut candidate_json = valid_runner_json_value();
+
+        *candidate_json
+            .pointer_mut("/meta/bench")
+            .expect("bench must exist in valid test JSON") = serde_json::json!("reduce");
+
+        let baseline_data =
+            serde_json::to_string(&baseline_json).expect("failed to serialize baseline test JSON");
+        let candidate_data =
+            serde_json::to_string(&candidate_json).expect("failed to serialize candidate test JSON");
+
+        let baseline = get_runner_json(
+            &baseline_data,
+            PathBuf::from("baseline.json"),
+            types::CmpInputSide::JsonBaseline,
+        )
+        .expect("baseline test JSON must deserialize");
+
+        let candidate = get_runner_json(
+            &candidate_data,
+            PathBuf::from("candidate.json"),
+            types::CmpInputSide::JsonCandidate,
+        )
+        .expect("candidate test JSON must deserialize");
+
+        let result = verify_required(&baseline, &candidate);
+
+        match result {
+            Err(types::CompareError::BenchmarkMismatch {
+                baseline_bench,
+                candidate_bench,
+            }) => {
+                assert_eq!(baseline_bench, "matmul");
+                assert_eq!(candidate_bench, "reduce");
+            }
+            Ok(()) => panic!("expected benchmark mismatch error"),
+            Err(other) => panic!("unexpected compare error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn verify_required_matching_inputs_test() {
+        let baseline_json = valid_runner_json_value();
+        let candidate_json = valid_runner_json_value();
+
+        let baseline_data =
+            serde_json::to_string(&baseline_json).expect("failed to serialize baseline test JSON");
+        let candidate_data =
+            serde_json::to_string(&candidate_json).expect("failed to serialize candidate test JSON");
+
+        let baseline = get_runner_json(
+            &baseline_data,
+            PathBuf::from("baseline.json"),
+            types::CmpInputSide::JsonBaseline,
+        )
+        .expect("baseline test JSON must deserialize");
+
+        let candidate = get_runner_json(
+            &candidate_data,
+            PathBuf::from("candidate.json"),
+            types::CmpInputSide::JsonCandidate,
+        )
+        .expect("candidate test JSON must deserialize");
+
+        let result = verify_required(&baseline, &candidate);
+
+        assert!(result.is_ok());
+    }
+
 }
