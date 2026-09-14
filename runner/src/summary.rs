@@ -231,4 +231,69 @@ mod tests {
         assert_eq!(10, summary.max_ns);
         assert_eq!(None, summary.spread_percent);
     }
+
+    #[test]
+    fn summary_attributes_numeric_spread_serialization_test() {
+        let summary = types::SummaryAttributes {
+            median_ns: 110,
+            min_ns: 100,
+            max_ns: 120,
+            spread_percent: Some(18.18),
+        };
+
+        let json_val =
+            serde_json::to_value(&summary).expect("failed to serialize SummaryAttributes");
+
+        let spread = json_val
+            .pointer("/spread_percent")
+            .expect("spread_percent must exist in serialized SummaryAttributes");
+
+        assert!(spread.is_number());
+        assert_eq!(Some(18.18), spread.as_f64());
+    }
+
+    #[test]
+    fn summary_attributes_null_spread_serialization_test() {
+        let summary = types::SummaryAttributes {
+            median_ns: 0,
+            min_ns: 0,
+            max_ns: 10,
+            spread_percent: None,
+        };
+
+        let json_val =
+            serde_json::to_value(&summary).expect("failed to serialize SummaryAttributes");
+
+        let spread = json_val
+            .pointer("/spread_percent")
+            .expect("spread_percent must exist in serialized SummaryAttributes");
+
+        assert!(spread.is_null());
+    }
+
+    #[test]
+    fn summary_attributes_spread_deserialization_test() {
+        let numeric_json = serde_json::json!({
+            "median_ns": 110,
+            "min_ns": 100,
+            "max_ns": 120,
+            "spread_percent": 18.18
+        });
+
+        let null_json = serde_json::json!({
+            "median_ns": 0,
+            "min_ns": 0,
+            "max_ns": 10,
+            "spread_percent": null
+        });
+
+        let numeric_summary: types::SummaryAttributes =
+            serde_json::from_value(numeric_json).expect("numeric spread_percent must deserialize");
+
+        let null_summary: types::SummaryAttributes =
+            serde_json::from_value(null_json).expect("null spread_percent must deserialize");
+
+        assert_eq!(Some(18.18), numeric_summary.spread_percent);
+        assert_eq!(None, null_summary.spread_percent);
+    }
 }
