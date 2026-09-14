@@ -748,6 +748,55 @@ mod tests {
 
     use super::*;
 
+
+    fn valid_runner_json_value() -> serde_json::Value {
+        serde_json::json!({
+            "meta": {
+                "schema_version": 2,
+                "cpu_pin": 2,
+                "warmup": 1,
+                "reps": 3,
+                "timestamp": "09-14-2026T12-00-00-000",
+                "git_sha": "test-sha",
+                "compiler": {
+                    "path": "clang++",
+                    "version": "test-version"
+                },
+                "uname": "test-uname",
+                "bench": "matmul",
+                "compiler_args": ["-O3"],
+                "command": ["perflab", "run"],
+                "workdir": "/test/workdir",
+                "perf_events_requested": null,
+                "perf_stat_base_args": null
+            },
+            "samples": [],
+            "summary": {
+                "phases_ns": {
+                    "init": {
+                        "median_ns": 100,
+                        "min_ns": 90,
+                        "max_ns": 110,
+                        "spread_percent": 20.0
+                    },
+                    "compute": {
+                        "median_ns": 1000,
+                        "min_ns": 950,
+                        "max_ns": 1050,
+                        "spread_percent": 10.0
+                    },
+                    "teardown": {
+                        "median_ns": 50,
+                        "min_ns": 45,
+                        "max_ns": 55,
+                        "spread_percent": 20.0
+                    }
+                },
+                "perf": null
+            }
+        })
+    }
+
     #[test]
     fn get_abs_delta_test() {
         assert_eq!(String::from("+20"), get_abs_delta(100, 120));
@@ -972,4 +1021,109 @@ mod tests {
 
         assert!(result.is_ok());
     }
+
+    #[test]
+    fn get_runner_json_wrong_schema_version_type_test() {
+        let mut json_val = valid_runner_json_value();
+        *json_val
+            .pointer_mut("/meta/schema_version")
+            .expect("schema_version must exist in valid test JSON") = serde_json::json!("2");
+
+        let json_data =
+            serde_json::to_string(&json_val).expect("failed to serialize test JSON");
+        let json_path = PathBuf::from("baseline.json");
+
+        let result = get_runner_json(
+            &json_data,
+            json_path.clone(),
+            types::CmpInputSide::JsonBaseline,
+        );
+
+        match result {
+            Err(types::CompareError::Deserialize {
+                input,
+                path,
+                source,
+            }) => {
+                assert!(matches!(input, types::CmpInputSide::JsonBaseline));
+                assert_eq!(path, json_path);
+                assert_eq!(source.path().to_string(), "meta.schema_version");
+            }
+            Ok(_) => panic!("expected typed deserialization error"),
+            Err(other) => panic!("unexpected compare error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn get_runner_json_wrong_compute_median_type_test() {
+        let mut json_val = valid_runner_json_value();
+        *json_val
+            .pointer_mut("/summary/phases_ns/compute/median_ns")
+            .expect("compute median_ns must exist in valid test JSON") =
+            serde_json::json!("1000");
+
+        let json_data =
+            serde_json::to_string(&json_val).expect("failed to serialize test JSON");
+        let json_path = PathBuf::from("candidate.json");
+
+        let result = get_runner_json(
+            &json_data,
+            json_path.clone(),
+            types::CmpInputSide::JsonCandidate,
+        );
+
+        match result {
+            Err(types::CompareError::Deserialize {
+                input,
+                path,
+                source,
+            }) => {
+                assert!(matches!(input, types::CmpInputSide::JsonCandidate));
+                assert_eq!(path, json_path);
+                assert_eq!(
+                    source.path().to_string(),
+                    "summary.phases_ns.compute.median_ns"
+                );
+            }
+            Ok(_) => panic!("expected typed deserialization error"),
+            Err(other) => panic!("unexpected compare error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn get_runner_json_wrong_compute_spread_type_test() {
+        let mut json_val = valid_runner_json_value();
+        *json_val
+            .pointer_mut("/summary/phases_ns/compute/spread_percent")
+            .expect("compute spread_percent must exist in valid test JSON") =
+            serde_json::json!("10.0");
+
+        let json_data =
+            serde_json::to_string(&json_val).expect("failed to serialize test JSON");
+        let json_path = PathBuf::from("candidate.json");
+
+        let result = get_runner_json(
+            &json_data,
+            json_path.clone(),
+            types::CmpInputSide::JsonCandidate,
+        );
+
+        match result {
+            Err(types::CompareError::Deserialize {
+                input,
+                path,
+                source,
+            }) => {
+                assert!(matches!(input, types::CmpInputSide::JsonCandidate));
+                assert_eq!(path, json_path);
+                assert_eq!(
+                    source.path().to_string(),
+                    "summary.phases_ns.compute.spread_percent"
+                );
+            }
+            Ok(_) => panic!("expected typed deserialization error"),
+            Err(other) => panic!("unexpected compare error: {other:?}"),
+        }
+    }
+
 }
