@@ -98,10 +98,16 @@ where
     arr.insert(index, new_val);
 }
 
+/// Returns the median of a sorted slice.
+///
+/// # Preconditions
+/// `arr` must be sorted in ascending order.
 fn get_median<T>(arr: &Vec<T>) -> T
 where
     T: Ord + Add<Output = T> + Div<T, Output = T> + Copy + FromPrimitive,
 {
+    debug_assert!(arr.is_sorted());
+
     let arr_len = arr.len();
     let mid_index = arr_len / 2;
 
@@ -113,10 +119,16 @@ where
         / T::from_u8(2u8).expect("Type T must be able to represent 2u8")
 }
 
+/// Returns the min of a sorted slice.
+///
+/// # Preconditions
+/// `arr` must be sorted in ascending order.
 fn get_min<T>(arr: &Vec<T>) -> T
 where
     T: Ord + Copy + FromPrimitive,
 {
+    debug_assert!(arr.is_sorted());
+
     if let Some(val) = arr.first() {
         *val
     } else {
@@ -124,10 +136,16 @@ where
     }
 }
 
+/// Returns the max of a sorted slice.
+///
+/// # Preconditions
+/// `arr` must be sorted in ascending order.
 fn get_max<T>(arr: &Vec<T>) -> T
 where
     T: Ord + Copy + FromPrimitive,
 {
+    debug_assert!(arr.is_sorted());
+
     if let Some(val) = arr.last() {
         *val
     } else {
@@ -157,5 +175,38 @@ where
         Some(0.0)
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::assert_eq;
+
+    use super::*;
+
+    #[test]
+    fn get_median_test() {
+        assert_eq!(110, get_median(&vec![100, 110, 120]));
+        assert_eq!(100, get_median(&vec![100]));
+    }
+
+    #[test]
+    fn get_min_test() {
+        assert_eq!(100, get_min(&vec![100, 110, 120]));
+        assert_eq!(100, get_min(&vec![100]));
+    }
+
+    #[test]
+    fn get_max_test() {
+        assert_eq!(120, get_max(&vec![100, 110, 120]));
+        assert_eq!(100, get_max(&vec![100]));
+    }
+
+    #[test]
+    fn get_spread_percent_test() {
+        if let Some(result) = get_spread_percent(110, 100, 120) {
+            assert_eq!(18.18, (result * 100.0).round() / 100.0);
+        }
+        assert_eq!(Some(0.0), get_spread_percent(100, 100, 100));
     }
 }
