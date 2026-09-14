@@ -1242,4 +1242,61 @@ mod tests {
         assert!(result.is_ok());
     }
 
+
+    #[test]
+    fn get_json_str_missing_inputs_test() {
+        let cases = [
+            (
+                PathBuf::from("/definitely/missing/perflab-baseline.json"),
+                true,
+            ),
+            (
+                PathBuf::from("/definitely/missing/perflab-candidate.json"),
+                false,
+            ),
+        ];
+
+        for (json_path, is_baseline) in cases {
+            let input_side = if is_baseline {
+                types::CmpInputSide::JsonBaseline
+            } else {
+                types::CmpInputSide::JsonCandidate
+            };
+
+            let result = get_json_str(json_path.clone(), input_side);
+
+            match result {
+                Err(types::CompareError::ReadInput { input, path, .. }) => {
+                    assert_eq!(path, json_path);
+
+                    if is_baseline {
+                        assert!(matches!(input, types::CmpInputSide::JsonBaseline));
+                    } else {
+                        assert!(matches!(input, types::CmpInputSide::JsonCandidate));
+                    }
+                }
+                Ok(_) => panic!("expected input read error"),
+                Err(other) => panic!("unexpected compare error: {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn get_json_str_directory_path_test() {
+        let dir_path = PathBuf::from("runner");
+        let result = get_json_str(
+            dir_path.clone(),
+            types::CmpInputSide::JsonBaseline,
+        );
+
+        match result {
+            Err(types::CompareError::ReadInput { input, path, .. }) => {
+                assert!(matches!(input, types::CmpInputSide::JsonBaseline));
+                assert_eq!(path, dir_path);
+            }
+            Ok(_) => panic!("expected input read error for directory path"),
+            Err(other) => panic!("unexpected compare error: {other:?}"),
+        }
+    }
+
 }
