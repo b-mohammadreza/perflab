@@ -748,7 +748,6 @@ mod tests {
 
     use super::*;
 
-
     fn valid_runner_json_value() -> serde_json::Value {
         serde_json::json!({
             "meta": {
@@ -955,8 +954,7 @@ mod tests {
         ];
 
         for (json_val, expected_field) in cases {
-            let result =
-                verify_required_structure(&json_val, types::CmpInputSide::JsonBaseline);
+            let result = verify_required_structure(&json_val, types::CmpInputSide::JsonBaseline);
 
             match result {
                 Err(types::CompareError::MissingRequiredField { input, field }) => {
@@ -1029,8 +1027,7 @@ mod tests {
             .pointer_mut("/meta/schema_version")
             .expect("schema_version must exist in valid test JSON") = serde_json::json!("2");
 
-        let json_data =
-            serde_json::to_string(&json_val).expect("failed to serialize test JSON");
+        let json_data = serde_json::to_string(&json_val).expect("failed to serialize test JSON");
         let json_path = PathBuf::from("baseline.json");
 
         let result = get_runner_json(
@@ -1059,11 +1056,9 @@ mod tests {
         let mut json_val = valid_runner_json_value();
         *json_val
             .pointer_mut("/summary/phases_ns/compute/median_ns")
-            .expect("compute median_ns must exist in valid test JSON") =
-            serde_json::json!("1000");
+            .expect("compute median_ns must exist in valid test JSON") = serde_json::json!("1000");
 
-        let json_data =
-            serde_json::to_string(&json_val).expect("failed to serialize test JSON");
+        let json_data = serde_json::to_string(&json_val).expect("failed to serialize test JSON");
         let json_path = PathBuf::from("candidate.json");
 
         let result = get_runner_json(
@@ -1098,8 +1093,7 @@ mod tests {
             .expect("compute spread_percent must exist in valid test JSON") =
             serde_json::json!("10.0");
 
-        let json_data =
-            serde_json::to_string(&json_val).expect("failed to serialize test JSON");
+        let json_data = serde_json::to_string(&json_val).expect("failed to serialize test JSON");
         let json_path = PathBuf::from("candidate.json");
 
         let result = get_runner_json(
@@ -1126,7 +1120,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn verify_required_schema_mismatch_test() {
         let baseline_json = valid_runner_json_value();
@@ -1138,8 +1131,8 @@ mod tests {
 
         let baseline_data =
             serde_json::to_string(&baseline_json).expect("failed to serialize baseline test JSON");
-        let candidate_data =
-            serde_json::to_string(&candidate_json).expect("failed to serialize candidate test JSON");
+        let candidate_data = serde_json::to_string(&candidate_json)
+            .expect("failed to serialize candidate test JSON");
 
         let baseline = get_runner_json(
             &baseline_data,
@@ -1181,8 +1174,8 @@ mod tests {
 
         let baseline_data =
             serde_json::to_string(&baseline_json).expect("failed to serialize baseline test JSON");
-        let candidate_data =
-            serde_json::to_string(&candidate_json).expect("failed to serialize candidate test JSON");
+        let candidate_data = serde_json::to_string(&candidate_json)
+            .expect("failed to serialize candidate test JSON");
 
         let baseline = get_runner_json(
             &baseline_data,
@@ -1220,8 +1213,8 @@ mod tests {
 
         let baseline_data =
             serde_json::to_string(&baseline_json).expect("failed to serialize baseline test JSON");
-        let candidate_data =
-            serde_json::to_string(&candidate_json).expect("failed to serialize candidate test JSON");
+        let candidate_data = serde_json::to_string(&candidate_json)
+            .expect("failed to serialize candidate test JSON");
 
         let baseline = get_runner_json(
             &baseline_data,
@@ -1241,7 +1234,6 @@ mod tests {
 
         assert!(result.is_ok());
     }
-
 
     #[test]
     fn get_json_str_missing_inputs_test() {
@@ -1284,10 +1276,7 @@ mod tests {
     #[test]
     fn get_json_str_directory_path_test() {
         let dir_path = PathBuf::from("runner");
-        let result = get_json_str(
-            dir_path.clone(),
-            types::CmpInputSide::JsonBaseline,
-        );
+        let result = get_json_str(dir_path.clone(), types::CmpInputSide::JsonBaseline);
 
         match result {
             Err(types::CompareError::ReadInput { input, path, .. }) => {
@@ -1298,5 +1287,4 @@ mod tests {
             Err(other) => panic!("unexpected compare error: {other:?}"),
         }
     }
-
 }

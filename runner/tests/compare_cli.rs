@@ -2,7 +2,6 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
-
 fn valid_runner_json_value() -> serde_json::Value {
     serde_json::json!({
         "meta": {
@@ -70,10 +69,10 @@ fn perflab_cli_help_test() {
 #[test]
 fn compare_missing_baseline_file_test() {
     let bin_path = env!("CARGO_BIN_EXE_perflab");
-    let missing_baseline = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-        .join("perflab-missing-baseline.json");
-    let candidate = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-        .join("perflab-unused-candidate.json");
+    let missing_baseline =
+        PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("perflab-missing-baseline.json");
+    let candidate =
+        PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("perflab-unused-candidate.json");
 
     let output = Command::new(bin_path)
         .arg("compare")
@@ -100,8 +99,7 @@ fn compare_malformed_json_cli_test() {
     let baseline = tmp_dir.join("perflab-malformed-baseline.json");
     let candidate = tmp_dir.join("perflab-malformed-candidate-valid.json");
 
-    fs::write(&baseline, r#"{"meta":"#)
-        .expect("failed to write malformed baseline JSON");
+    fs::write(&baseline, r#"{"meta":"#).expect("failed to write malformed baseline JSON");
     write_json(&candidate, &valid_runner_json_value());
 
     let output = Command::new(bin_path)
@@ -134,8 +132,7 @@ fn compare_schema_mismatch_cli_test() {
 
     *candidate_json
         .pointer_mut("/meta/schema_version")
-        .expect("schema_version must exist in valid integration-test JSON") =
-        serde_json::json!(3);
+        .expect("schema_version must exist in valid integration-test JSON") = serde_json::json!(3);
 
     write_json(&baseline, &baseline_json);
     write_json(&candidate, &candidate_json);
@@ -173,8 +170,7 @@ fn compare_benchmark_mismatch_cli_test() {
 
     *candidate_json
         .pointer_mut("/meta/bench")
-        .expect("bench must exist in valid integration-test JSON") =
-        serde_json::json!("reduce");
+        .expect("bench must exist in valid integration-test JSON") = serde_json::json!("reduce");
 
     write_json(&baseline, &baseline_json);
     write_json(&candidate, &candidate_json);
@@ -197,4 +193,3 @@ fn compare_benchmark_mismatch_cli_test() {
     assert!(!stdout.contains("PerfLab compare v0"));
     assert!(!stderr.contains("panicked at"));
 }
-
