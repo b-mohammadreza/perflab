@@ -769,6 +769,7 @@ mod tests {
         assert_eq!(String::from("0.00%"), get_spread_percent(Some(0.0)));
         assert_eq!(String::from("null"), get_spread_percent(None));
     }
+
     #[test]
     fn verify_required_structure_valid_test() {
         let json_val = serde_json::json!({
@@ -792,7 +793,135 @@ mod tests {
     }
 
     #[test]
-    fn verify_required_structure_missing_compute_test() {
+    fn verify_required_structure_missing_fields_test() {
+        let cases = [
+            (
+                serde_json::json!({
+                    "meta": {
+                        "bench": "matmul"
+                    },
+                    "summary": {
+                        "phases_ns": {
+                            "init": {},
+                            "compute": {},
+                            "teardown": {}
+                        },
+                        "perf": null
+                    }
+                }),
+                "meta.schema_version",
+            ),
+            (
+                serde_json::json!({
+                    "meta": {
+                        "schema_version": 2
+                    },
+                    "summary": {
+                        "phases_ns": {
+                            "init": {},
+                            "compute": {},
+                            "teardown": {}
+                        },
+                        "perf": null
+                    }
+                }),
+                "meta.bench",
+            ),
+            (
+                serde_json::json!({
+                    "meta": {
+                        "schema_version": 2,
+                        "bench": "matmul"
+                    },
+                    "summary": {
+                        "perf": null
+                    }
+                }),
+                "summary.phases_ns",
+            ),
+            (
+                serde_json::json!({
+                    "meta": {
+                        "schema_version": 2,
+                        "bench": "matmul"
+                    },
+                    "summary": {
+                        "phases_ns": {
+                            "compute": {},
+                            "teardown": {}
+                        },
+                        "perf": null
+                    }
+                }),
+                "summary.phases_ns.init",
+            ),
+            (
+                serde_json::json!({
+                    "meta": {
+                        "schema_version": 2,
+                        "bench": "matmul"
+                    },
+                    "summary": {
+                        "phases_ns": {
+                            "init": {},
+                            "teardown": {}
+                        },
+                        "perf": null
+                    }
+                }),
+                "summary.phases_ns.compute",
+            ),
+            (
+                serde_json::json!({
+                    "meta": {
+                        "schema_version": 2,
+                        "bench": "matmul"
+                    },
+                    "summary": {
+                        "phases_ns": {
+                            "init": {},
+                            "compute": {}
+                        },
+                        "perf": null
+                    }
+                }),
+                "summary.phases_ns.teardown",
+            ),
+            (
+                serde_json::json!({
+                    "meta": {
+                        "schema_version": 2,
+                        "bench": "matmul"
+                    },
+                    "summary": {
+                        "phases_ns": {
+                            "init": {},
+                            "compute": {},
+                            "teardown": {}
+                        }
+                    }
+                }),
+                "summary.perf",
+            ),
+        ];
+
+        for (json_val, expected_field) in cases {
+            let result =
+                verify_required_structure(&json_val, types::CmpInputSide::JsonBaseline);
+
+            match result {
+                Err(types::CompareError::MissingRequiredField { input, field }) => {
+                    assert!(matches!(input, types::CmpInputSide::JsonBaseline));
+                    assert_eq!(field, expected_field);
+                }
+                Ok(()) => panic!("expected missing required field error"),
+                Err(other) => panic!("unexpected compare error: {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn verify_required_structure_missing_perf_events_test() {
         let json_val = serde_json::json!({
             "meta": {
                 "schema_version": 2,
@@ -801,9 +930,10 @@ mod tests {
             "summary": {
                 "phases_ns": {
                     "init": {},
+                    "compute": {},
                     "teardown": {}
                 },
-                "perf": null
+                "perf": {}
             }
         });
 
@@ -812,10 +942,34 @@ mod tests {
         match result {
             Err(types::CompareError::MissingRequiredField { input, field }) => {
                 assert!(matches!(input, types::CmpInputSide::JsonCandidate));
-                assert_eq!(field, "summary.phases_ns.compute");
+                assert_eq!(field, "summary.perf.events");
             }
-            Ok(()) => panic!("expected missing required field error"),
+            Ok(()) => panic!("expected missing perf events error"),
             Err(other) => panic!("unexpected compare error: {other:?}"),
         }
+    }
+
+    #[test]
+    fn verify_required_structure_with_perf_events_test() {
+        let json_val = serde_json::json!({
+            "meta": {
+                "schema_version": 2,
+                "bench": "matmul"
+            },
+            "summary": {
+                "phases_ns": {
+                    "init": {},
+                    "compute": {},
+                    "teardown": {}
+                },
+                "perf": {
+                    "events": {}
+                }
+            }
+        });
+
+        let result = verify_required_structure(&json_val, types::CmpInputSide::JsonBaseline);
+
+        assert!(result.is_ok());
     }
 }
