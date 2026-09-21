@@ -135,15 +135,6 @@ pub struct CompareArgs {
     pub format: Format,
 }
 
-#[derive(Debug)]
-pub struct CmpPerfEvent {
-    pub event_name: String,
-    pub baseline: u64,
-    pub candidate: u64,
-}
-
-pub type CmpPerfEvents = Vec<CmpPerfEvent>;
-
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum Format {
     /// Compare result in text format
@@ -160,28 +151,84 @@ pub enum CmpInputSide {
     JsonCandidate,
 }
 
-pub struct CmpItemData {
-    pub item_name: String,
-    pub baseline: u64,
-    pub candidate: u64,
-    pub abs_delta: String,
-    pub percent_delta: String,
-    pub baseline_spread: String,
-    pub candidate_spread: String,
-}
-
-/// To store global comparison data and pass its reference to indivisual renderers
-pub struct CmpGData {
+#[derive(Default)]
+pub struct ComparisonMeta {
     pub baseline_path: String,
     pub candidate_path: String,
     pub bench: String,
     pub schm_ver: u32,
-    pub init_phase: CmpItemData,
-    pub compute_phase: CmpItemData,
-    pub tear_down_phase: CmpItemData,
-    pub perf_unavail: bool,
-    pub perf_events_unavail: bool,
-    pub perf_events: Vec<CmpItemData>,
+}
+
+pub struct PhaseComparison {
+    pub item_name: String,
+    pub baseline: u64,
+    pub candidate: u64,
+    pub abs_delta: i64,
+    pub percent_delta: Option<f64>,
+    pub baseline_spread: Option<f64>,
+    pub candidate_spread: Option<f64>,
+}
+
+pub struct PerfComparison {
+    pub event_name: String,
+    pub baseline: u64,
+    pub candidate: u64,
+    pub abs_delta: i64,
+    pub percent_delta: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ComparisonWarning {
+    CompilerPathMismatch {
+        baseline: String,
+        candidate: String,
+    },
+    CompilerVersionMismatch {
+        baseline: String,
+        candidate: String,
+    },
+    CompilerArgsMismatch {
+        baseline: Vec<String>,
+        candidate: Vec<String>,
+    },
+    CpuPinMismatch {
+        baseline: Option<u16>,
+        candidate: Option<u16>,
+    },
+    WarmupMismatch {
+        baseline: u32,
+        candidate: u32,
+    },
+    RepsMismatch {
+        baseline: u32,
+        candidate: u32,
+    },
+    PerfEventsRequestedMismatch {
+        baseline: Option<Vec<String>>,
+        candidate: Option<Vec<String>>,
+    },
+    WorkdirMismatch {
+        baseline: String,
+        candidate: String,
+    },
+    GitShaMismatch {
+        baseline: String,
+        candidate: String,
+    },
+    UnameMismatch {
+        baseline: String,
+        candidate: String,
+    },
+    PerfUnavailable,
+    PerfEventsUnavailable,
+}
+
+#[derive(Default)]
+pub struct ComparisonResult {
+    pub meta: ComparisonMeta,
+    pub phase_comparisons: Vec<PhaseComparison>,
+    pub perf_comparisons: Vec<PerfComparison>,
+    pub warnings: Vec<ComparisonWarning>,
 }
 
 pub trait CmpRenderer {
@@ -197,15 +244,15 @@ pub trait CmpRenderer {
 }
 
 pub struct TextCmpRenderer<'cmp_g> {
-    pub cmp_g_data: &'cmp_g CmpGData,
+    pub cmp_g_data: &'cmp_g ComparisonResult,
 }
 
 pub struct MarkdownCmpRenderer<'cmp_g> {
-    pub cmp_g_data: &'cmp_g CmpGData,
+    pub cmp_g_data: &'cmp_g ComparisonResult,
 }
 
 pub struct CsvCmpRenderer<'cmp_g> {
-    pub cmp_g_data: &'cmp_g CmpGData,
+    pub cmp_g_data: &'cmp_g ComparisonResult,
 }
 
 #[derive(Debug)]

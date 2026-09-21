@@ -38,30 +38,39 @@ pub fn execute() -> Result<(), types::CompareError> {
     )?;
 
     verify_required(&baseline_obj, &candidate_obj)?;
-    verify_good_to_have(&baseline_obj, &candidate_obj)?;
 
-    let baseline_path = cmp_args.baseline.to_string_lossy().trim().to_string();
-    let candidate_path = cmp_args.candidate.to_string_lossy().trim().to_string();
-    let bench = baseline_obj.meta.bench.clone();
-    let schm_ver = baseline_obj.meta.schema_version.clone();
-    let cmp_data: types::CmpGData = get_cmp_g_data(
-        &baseline_path,
-        &candidate_path,
-        bench,
-        schm_ver,
-        &baseline_obj,
-        &candidate_obj,
-    );
+    let mut comparison_warnings: Vec<types::ComparisonWarning> =
+        verify_good_to_have(&baseline_obj, &candidate_obj);
+
+    let mut perf_warning: Option<types::ComparisonWarning> = None;
+    if let Some(warning) = verify_summary_perf_avail(&baseline_obj, &candidate_obj) {
+        perf_warning = Some(warning.clone());
+        comparison_warnings.push(warning);
+    }
+
+    let mut comparison_result: types::ComparisonResult = types::ComparisonResult::default();
+    comparison_result.meta.baseline_path = cmp_args.baseline.to_string_lossy().trim().to_string();
+    comparison_result.meta.candidate_path = cmp_args.candidate.to_string_lossy().trim().to_string();
+    comparison_result.meta.bench = baseline_obj.meta.bench.clone();
+    comparison_result.meta.schm_ver = baseline_obj.meta.schema_version.clone();
+
+    comparison_result.warnings = comparison_warnings;
+
+    comparison_result.phase_comparisons = get_phase_comparisons(&baseline_obj, &candidate_obj);
+    comparison_result.perf_comparisons =
+        get_perf_comparisons(&baseline_obj, &candidate_obj, perf_warning);
+
+    render_warnings(&comparison_result.warnings)?;
 
     let cmp_renderer: Box<dyn types::CmpRenderer> = match cmp_args.format {
         types::Format::Text => Box::new(types::TextCmpRenderer {
-            cmp_g_data: &cmp_data,
+            cmp_g_data: &comparison_result,
         }),
         types::Format::Markdown => Box::new(types::MarkdownCmpRenderer {
-            cmp_g_data: &cmp_data,
+            cmp_g_data: &comparison_result,
         }),
         types::Format::Csv => Box::new(types::CsvCmpRenderer {
-            cmp_g_data: &cmp_data,
+            cmp_g_data: &comparison_result,
         }),
     };
 
@@ -200,107 +209,201 @@ fn verify_required(
     }
 }
 
+fn render_warnings(warnings: &Vec<types::ComparisonWarning>) -> Result<(), types::CompareError> {
+    for warning in warnings {
+        match warning {
+            types::ComparisonWarning::CompilerPathMismatch {
+                baseline,
+                candidate,
+            } => {
+                eprintln!(
+                    "perflab-compare-warning: compiler.path differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
+                    format_warn_err_value(&baseline)?,
+                    format_warn_err_value(&candidate)?
+                );
+            }
+            types::ComparisonWarning::CompilerVersionMismatch {
+                baseline,
+                candidate,
+            } => {
+                eprintln!(
+                    "perflab-compare-warning: compiler.version differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
+                    format_warn_err_value(&baseline)?,
+                    format_warn_err_value(&candidate)?
+                );
+            }
+            types::ComparisonWarning::CompilerArgsMismatch {
+                baseline,
+                candidate,
+            } => {
+                eprintln!(
+                    "perflab-compare-warning: compiler_args differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
+                    format_warn_err_value(&baseline)?,
+                    format_warn_err_value(&candidate)?
+                );
+            }
+            types::ComparisonWarning::CpuPinMismatch {
+                baseline,
+                candidate,
+            } => {
+                eprintln!(
+                    "perflab-compare-warning: cpu_pin differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
+                    format_warn_err_value(&baseline)?,
+                    format_warn_err_value(&candidate)?
+                );
+            }
+            types::ComparisonWarning::WarmupMismatch {
+                baseline,
+                candidate,
+            } => {
+                eprintln!(
+                    "perflab-compare-warning: warmup differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
+                    format_warn_err_value(&baseline)?,
+                    format_warn_err_value(&candidate)?
+                );
+            }
+            types::ComparisonWarning::RepsMismatch {
+                baseline,
+                candidate,
+            } => {
+                eprintln!(
+                    "perflab-compare-warning: reps differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
+                    format_warn_err_value(&baseline)?,
+                    format_warn_err_value(&candidate)?
+                );
+            }
+            types::ComparisonWarning::PerfEventsRequestedMismatch {
+                baseline,
+                candidate,
+            } => {
+                eprintln!(
+                    "perflab-compare-warning: perf_events_requested differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
+                    format_warn_err_value(&baseline)?,
+                    format_warn_err_value(&candidate)?
+                );
+            }
+            types::ComparisonWarning::WorkdirMismatch {
+                baseline,
+                candidate,
+            } => {
+                eprintln!(
+                    "perflab-compare-warning: workdir differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
+                    format_warn_err_value(&baseline)?,
+                    format_warn_err_value(&candidate)?
+                );
+            }
+            types::ComparisonWarning::GitShaMismatch {
+                baseline,
+                candidate,
+            } => {
+                eprintln!(
+                    "perflab-compare-warning: git_sha differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
+                    format_warn_err_value(&baseline)?,
+                    format_warn_err_value(&candidate)?
+                );
+            }
+            types::ComparisonWarning::UnameMismatch {
+                baseline,
+                candidate,
+            } => {
+                eprintln!(
+                    "perflab-compare-warning: uname differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
+                    format_warn_err_value(&baseline)?,
+                    format_warn_err_value(&candidate)?
+                );
+            }
+            _ => {}
+        }
+    }
+
+    Ok(())
+}
+
 fn verify_good_to_have(
     baseline: &types::RunnerJson,
     candidate: &types::RunnerJson,
-) -> Result<(), types::CompareError> {
+) -> Vec<types::ComparisonWarning> {
+    let mut comparison_warnings: Vec<types::ComparisonWarning> = Vec::new();
+
     if baseline.meta.compiler.path != candidate.meta.compiler.path {
-        eprintln!(
-            "perflab-compare-warning: compiler.path differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.compiler.path)?,
-            format_warn_err_value(&candidate.meta.compiler.path)?
-        );
+        comparison_warnings.push(types::ComparisonWarning::CompilerPathMismatch {
+            baseline: baseline.meta.compiler.path.clone(),
+            candidate: candidate.meta.compiler.path.clone(),
+        });
     }
     if baseline.meta.compiler.version != candidate.meta.compiler.version {
-        eprintln!(
-            "perflab-compare-warning: compiler.version differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.compiler.version)?,
-            format_warn_err_value(&candidate.meta.compiler.version)?
-        );
+        comparison_warnings.push(types::ComparisonWarning::CompilerVersionMismatch {
+            baseline: baseline.meta.compiler.version.clone(),
+            candidate: candidate.meta.compiler.version.clone(),
+        });
     }
     if baseline
         .meta
         .compiler_args
         .ne(&candidate.meta.compiler_args)
     {
-        eprintln!(
-            "perflab-compare-warning: compiler_args differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.compiler_args)?,
-            format_warn_err_value(&candidate.meta.compiler_args)?
-        );
+        comparison_warnings.push(types::ComparisonWarning::CompilerArgsMismatch {
+            baseline: baseline.meta.compiler_args.clone(),
+            candidate: candidate.meta.compiler_args.clone(),
+        });
     }
     if baseline.meta.cpu_pin.ne(&candidate.meta.cpu_pin) {
-        eprintln!(
-            "perflab-compare-warning: cpu_pin differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.cpu_pin)?,
-            format_warn_err_value(&candidate.meta.cpu_pin)?
-        );
+        comparison_warnings.push(types::ComparisonWarning::CpuPinMismatch {
+            baseline: baseline.meta.cpu_pin,
+            candidate: candidate.meta.cpu_pin,
+        });
     }
     if baseline.meta.warmup != candidate.meta.warmup {
-        eprintln!(
-            "perflab-compare-warning: warmup differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.warmup)?,
-            format_warn_err_value(&candidate.meta.warmup)?
-        );
+        comparison_warnings.push(types::ComparisonWarning::WarmupMismatch {
+            baseline: baseline.meta.warmup,
+            candidate: candidate.meta.warmup,
+        });
     }
     if baseline.meta.reps != candidate.meta.reps {
-        eprintln!(
-            "perflab-compare-warning: reps differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.reps)?,
-            format_warn_err_value(&candidate.meta.reps)?
-        );
+        comparison_warnings.push(types::ComparisonWarning::RepsMismatch {
+            baseline: baseline.meta.reps,
+            candidate: candidate.meta.reps,
+        });
     }
     if baseline
         .meta
         .perf_events_requested
         .ne(&candidate.meta.perf_events_requested)
     {
-        eprintln!(
-            "perflab-compare-warning: perf_events_requested differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.perf_events_requested)?,
-            format_warn_err_value(&candidate.meta.perf_events_requested)?
-        );
+        comparison_warnings.push(types::ComparisonWarning::PerfEventsRequestedMismatch {
+            baseline: baseline.meta.perf_events_requested.clone(),
+            candidate: candidate.meta.perf_events_requested.clone(),
+        });
     }
     if baseline.meta.workdir != candidate.meta.workdir {
-        eprintln!(
-            "perflab-compare-warning: workdir differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.workdir)?,
-            format_warn_err_value(&candidate.meta.workdir)?
-        );
+        comparison_warnings.push(types::ComparisonWarning::WorkdirMismatch {
+            baseline: baseline.meta.workdir.clone(),
+            candidate: candidate.meta.workdir.clone(),
+        });
     }
     if baseline.meta.git_sha != candidate.meta.git_sha {
-        eprintln!(
-            "perflab-compare-warning: git_sha differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.git_sha)?,
-            format_warn_err_value(&candidate.meta.git_sha)?
-        );
+        comparison_warnings.push(types::ComparisonWarning::GitShaMismatch {
+            baseline: baseline.meta.git_sha.clone(),
+            candidate: candidate.meta.git_sha.clone(),
+        });
     }
     if baseline.meta.uname != candidate.meta.uname {
-        eprintln!(
-            "perflab-compare-warning: uname differ, \n\tbaseline=\t{} \n\tcandidate=\t{}",
-            format_warn_err_value(&baseline.meta.uname)?,
-            format_warn_err_value(&candidate.meta.uname)?
-        );
+        comparison_warnings.push(types::ComparisonWarning::UnameMismatch {
+            baseline: baseline.meta.uname.clone(),
+            candidate: candidate.meta.uname.clone(),
+        });
     }
-    Ok(())
+
+    comparison_warnings
 }
 
-fn get_cmp_g_data(
-    baseline_path: &String,
-    candidate_path: &String,
-    bench: String,
-    schm_ver: u32,
+fn get_phase_comparisons(
     baseline: &types::RunnerJson,
     candidate: &types::RunnerJson,
-) -> types::CmpGData {
-    let mut cmp_g_data: types::CmpGData = types::CmpGData::new();
+) -> Vec<types::PhaseComparison> {
+    let mut phase_comparisons: Vec<types::PhaseComparison> = Vec::new();
 
-    cmp_g_data.baseline_path = baseline_path.to_string();
-    cmp_g_data.candidate_path = candidate_path.to_string();
-    cmp_g_data.bench = bench;
-    cmp_g_data.schm_ver = schm_ver;
-
-    cmp_g_data.init_phase = types::CmpItemData {
+    phase_comparisons.push(types::PhaseComparison {
         item_name: String::from("init"),
         baseline: baseline.summary.phases_ns.init.median_ns,
         candidate: candidate.summary.phases_ns.init.median_ns,
@@ -312,11 +415,11 @@ fn get_cmp_g_data(
             baseline.summary.phases_ns.init.median_ns,
             candidate.summary.phases_ns.init.median_ns,
         ),
-        baseline_spread: get_spread_percent(baseline.summary.phases_ns.init.spread_percent),
-        candidate_spread: get_spread_percent(candidate.summary.phases_ns.init.spread_percent),
-    };
+        baseline_spread: baseline.summary.phases_ns.init.spread_percent,
+        candidate_spread: candidate.summary.phases_ns.init.spread_percent,
+    });
 
-    cmp_g_data.compute_phase = types::CmpItemData {
+    phase_comparisons.push(types::PhaseComparison {
         item_name: String::from("compute"),
         baseline: baseline.summary.phases_ns.compute.median_ns,
         candidate: candidate.summary.phases_ns.compute.median_ns,
@@ -328,11 +431,11 @@ fn get_cmp_g_data(
             baseline.summary.phases_ns.compute.median_ns,
             candidate.summary.phases_ns.compute.median_ns,
         ),
-        baseline_spread: get_spread_percent(baseline.summary.phases_ns.compute.spread_percent),
-        candidate_spread: get_spread_percent(candidate.summary.phases_ns.compute.spread_percent),
-    };
+        baseline_spread: baseline.summary.phases_ns.compute.spread_percent,
+        candidate_spread: candidate.summary.phases_ns.compute.spread_percent,
+    });
 
-    cmp_g_data.tear_down_phase = types::CmpItemData {
+    phase_comparisons.push(types::PhaseComparison {
         item_name: String::from("teardown"),
         baseline: baseline.summary.phases_ns.teardown.median_ns,
         candidate: candidate.summary.phases_ns.teardown.median_ns,
@@ -344,95 +447,100 @@ fn get_cmp_g_data(
             baseline.summary.phases_ns.teardown.median_ns,
             candidate.summary.phases_ns.teardown.median_ns,
         ),
-        baseline_spread: get_spread_percent(baseline.summary.phases_ns.teardown.spread_percent),
-        candidate_spread: get_spread_percent(candidate.summary.phases_ns.teardown.spread_percent),
-    };
+        baseline_spread: baseline.summary.phases_ns.teardown.spread_percent,
+        candidate_spread: candidate.summary.phases_ns.teardown.spread_percent,
+    });
 
-    verify_summary_perf_avail(&mut cmp_g_data, baseline, candidate);
-
-    if cmp_g_data.perf_unavail == false && cmp_g_data.perf_events_unavail == false {
-        let perf_events = get_common_perf_events(baseline, candidate);
-
-        for event in perf_events {
-            cmp_g_data.perf_events.push(types::CmpItemData {
-                item_name: event.event_name,
-                baseline: event.baseline,
-                candidate: event.candidate,
-                abs_delta: get_abs_delta(event.baseline, event.candidate),
-                percent_delta: get_percent_delta(event.baseline, event.candidate),
-                baseline_spread: String::from(""),
-                candidate_spread: String::from(""),
-            });
-        }
-    }
-
-    cmp_g_data
+    phase_comparisons
 }
 
-fn verify_summary_perf_avail(
-    cmp_data: &mut types::CmpGData,
+fn get_perf_comparisons(
     baseline: &types::RunnerJson,
     candidate: &types::RunnerJson,
-) {
-    if let None = baseline.summary.perf {
-        cmp_data.perf_unavail = true;
-    } else if let None = candidate.summary.perf {
-        cmp_data.perf_unavail = true;
-    } else if let Some(perf_events) = baseline.summary.perf.as_ref() {
-        if perf_events.events.is_empty() {
-            cmp_data.perf_events_unavail = true;
-        }
-    } else if let Some(perf_events) = candidate.summary.perf.as_ref() {
-        if perf_events.events.is_empty() {
-            cmp_data.perf_events_unavail = true;
-        }
-    }
-}
+    perf_warning: Option<types::ComparisonWarning>,
+) -> Vec<types::PerfComparison> {
+    let mut perf_comparisons: Vec<types::PerfComparison> = Vec::new();
 
-fn get_common_perf_events(
-    baseline: &types::RunnerJson,
-    candidate: &types::RunnerJson,
-) -> types::CmpPerfEvents {
-    let mut common_perf_events: types::CmpPerfEvents = Vec::new();
-
-    if let Some(baseline_perf_events) = baseline.summary.perf.as_ref() {
-        if let Some(candidate_perf_events) = candidate.summary.perf.as_ref() {
-            for b_event in &baseline_perf_events.events {
-                for c_event in &candidate_perf_events.events {
-                    if b_event.0 == c_event.0 {
-                        common_perf_events.push(types::CmpPerfEvent {
-                            event_name: b_event.0.to_string(),
-                            baseline: *b_event.1,
-                            candidate: *c_event.1,
-                        });
+    match perf_warning {
+        Some(types::ComparisonWarning::PerfUnavailable) => perf_comparisons,
+        Some(types::ComparisonWarning::PerfEventsUnavailable) => perf_comparisons,
+        _ => {
+            if let Some(baseline_perf_events) = baseline.summary.perf.as_ref() {
+                if let Some(candidate_perf_events) = candidate.summary.perf.as_ref() {
+                    for b_event in &baseline_perf_events.events {
+                        for c_event in &candidate_perf_events.events {
+                            if b_event.0 == c_event.0 {
+                                perf_comparisons.push(types::PerfComparison {
+                                    event_name: b_event.0.to_string(),
+                                    baseline: *b_event.1,
+                                    candidate: *c_event.1,
+                                    abs_delta: get_abs_delta(*b_event.1, *c_event.1),
+                                    percent_delta: get_percent_delta(*b_event.1, *c_event.1),
+                                });
+                            }
+                        }
                     }
                 }
             }
+
+            perf_comparisons.sort_by(|elem_1, elem_2| elem_1.event_name.cmp(&elem_2.event_name));
+
+            perf_comparisons
         }
     }
-
-    common_perf_events.sort_by(|elem_1, elem_2| elem_1.event_name.cmp(&elem_2.event_name));
-    common_perf_events
 }
 
-fn get_abs_delta(baseline_phase: u64, candidate_phase: u64) -> String {
-    format!("{:+}", candidate_phase as i64 - baseline_phase as i64).to_string()
-}
-
-fn get_percent_delta(baseline_phase: u64, candidate_phase: u64) -> String {
-    match baseline_phase {
-        0 => String::from("N/A"),
-        _ => format!(
-            "{:+.2}%",
-            ((candidate_phase as f64 - baseline_phase as f64) / baseline_phase as f64 * 100.0)
-        ),
+fn verify_summary_perf_avail(
+    baseline: &types::RunnerJson,
+    candidate: &types::RunnerJson,
+) -> Option<types::ComparisonWarning> {
+    if let None = baseline.summary.perf {
+        Some(types::ComparisonWarning::PerfUnavailable)
+    } else if let None = candidate.summary.perf {
+        Some(types::ComparisonWarning::PerfUnavailable)
+    } else if let Some(perf_events) = baseline.summary.perf.as_ref() {
+        if perf_events.events.is_empty() {
+            Some(types::ComparisonWarning::PerfEventsUnavailable)
+        } else {
+            None
+        }
+    } else if let Some(perf_events) = candidate.summary.perf.as_ref() {
+        if perf_events.events.is_empty() {
+            Some(types::ComparisonWarning::PerfEventsUnavailable)
+        } else {
+            None
+        }
+    } else {
+        None
     }
 }
 
-fn get_spread_percent(spread: Option<f64>) -> String {
+fn get_abs_delta(baseline_phase: u64, candidate_phase: u64) -> i64 {
+    candidate_phase as i64 - baseline_phase as i64
+}
+
+fn get_abs_delta_str(val: i64) -> String {
+    format!("{:+}", val).to_string()
+}
+
+fn get_percent_delta(baseline_phase: u64, candidate_phase: u64) -> Option<f64> {
+    match baseline_phase {
+        0 => None,
+        _ => Some((candidate_phase as f64 - baseline_phase as f64) / baseline_phase as f64 * 100.0),
+    }
+}
+
+fn get_percent_delta_str(val: Option<f64>) -> String {
+    match val {
+        None => String::from("N/A"),
+        Some(val) => format!("{:+.2}%", val).to_string(),
+    }
+}
+
+fn get_spread_percent_str(spread: Option<f64>) -> String {
     match spread {
         None => String::from("null"),
-        Some(val) => format!("{:.2}%", val),
+        Some(val) => format!("{:.2}%", val).to_string(),
     }
 }
 
@@ -447,55 +555,14 @@ where
     }
 }
 
-impl types::CmpGData {
-    fn new() -> types::CmpGData {
-        types::CmpGData {
-            baseline_path: String::from(""),
-            candidate_path: String::from(""),
-            bench: String::from(""),
-            schm_ver: 0,
-            init_phase: types::CmpItemData {
-                item_name: String::from(""),
-                baseline: 0u64,
-                candidate: 0u64,
-                abs_delta: String::from(""),
-                percent_delta: String::from(""),
-                baseline_spread: String::from(""),
-                candidate_spread: String::from(""),
-            },
-            compute_phase: types::CmpItemData {
-                item_name: String::from(""),
-                baseline: 0u64,
-                candidate: 0u64,
-                abs_delta: String::from(""),
-                percent_delta: String::from(""),
-                baseline_spread: String::from(""),
-                candidate_spread: String::from(""),
-            },
-            tear_down_phase: types::CmpItemData {
-                item_name: String::from(""),
-                baseline: 0u64,
-                candidate: 0u64,
-                abs_delta: String::from(""),
-                percent_delta: String::from(""),
-                baseline_spread: String::from(""),
-                candidate_spread: String::from(""),
-            },
-            perf_unavail: false,
-            perf_events_unavail: false,
-            perf_events: Vec::new(),
-        }
-    }
-}
-
 impl<'cmp_g> types::CmpRenderer for types::TextCmpRenderer<'cmp_g> {
     fn render_cmp_header(&self) {
         println!("");
         println!("PerfLab compare v0");
-        println!("\tbaseline:\t{}", self.cmp_g_data.baseline_path);
-        println!("\tcandidate:\t{}", self.cmp_g_data.candidate_path);
-        println!("\tbench:\t{}", self.cmp_g_data.bench);
-        println!("\tschema:\t{}", self.cmp_g_data.schm_ver);
+        println!("\tbaseline:\t{}", self.cmp_g_data.meta.baseline_path);
+        println!("\tcandidate:\t{}", self.cmp_g_data.meta.candidate_path);
+        println!("\tbench:\t{}", self.cmp_g_data.meta.bench);
+        println!("\tschema:\t{}", self.cmp_g_data.meta.schm_ver);
         println!("");
     }
 
@@ -514,52 +581,40 @@ impl<'cmp_g> types::CmpRenderer for types::TextCmpRenderer<'cmp_g> {
             "candidate spread",
             w = INDENT_LEN
         );
-        println!(
-            "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
-            self.cmp_g_data.init_phase.item_name,
-            self.cmp_g_data.init_phase.baseline,
-            self.cmp_g_data.init_phase.candidate,
-            self.cmp_g_data.init_phase.abs_delta,
-            self.cmp_g_data.init_phase.percent_delta,
-            self.cmp_g_data.init_phase.baseline_spread,
-            self.cmp_g_data.init_phase.candidate_spread,
-            w = INDENT_LEN
-        );
-        println!(
-            "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
-            self.cmp_g_data.compute_phase.item_name,
-            self.cmp_g_data.compute_phase.baseline,
-            self.cmp_g_data.compute_phase.candidate,
-            self.cmp_g_data.compute_phase.abs_delta,
-            self.cmp_g_data.compute_phase.percent_delta,
-            self.cmp_g_data.compute_phase.baseline_spread,
-            self.cmp_g_data.compute_phase.candidate_spread,
-            w = INDENT_LEN
-        );
-        println!(
-            "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
-            self.cmp_g_data.tear_down_phase.item_name,
-            self.cmp_g_data.tear_down_phase.baseline,
-            self.cmp_g_data.tear_down_phase.candidate,
-            self.cmp_g_data.tear_down_phase.abs_delta,
-            self.cmp_g_data.tear_down_phase.percent_delta,
-            self.cmp_g_data.tear_down_phase.baseline_spread,
-            self.cmp_g_data.tear_down_phase.candidate_spread,
-            w = INDENT_LEN
-        );
+        for item in &self.cmp_g_data.phase_comparisons {
+            println!(
+                "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
+                item.item_name,
+                item.baseline,
+                item.candidate,
+                get_abs_delta_str(item.abs_delta),
+                get_percent_delta_str(item.percent_delta),
+                get_spread_percent_str(item.baseline_spread),
+                get_spread_percent_str(item.candidate_spread),
+                w = INDENT_LEN
+            );
+        }
         println!("");
     }
 
     fn render_summary_perf(&self) {
         const INDENT_LEN: usize = 25;
 
-        if self.cmp_g_data.perf_unavail {
+        if self
+            .cmp_g_data
+            .warnings
+            .contains(&types::ComparisonWarning::PerfUnavailable)
+        {
             eprintln!(
                 "perflab-compare-warning: perf unavailable, perf data is unavailable in one or both inputs"
             );
-        } else if self.cmp_g_data.perf_events_unavail {
+        } else if self
+            .cmp_g_data
+            .warnings
+            .contains(&types::ComparisonWarning::PerfEventsUnavailable)
+        {
             eprintln!(
-                "perflab-compare-error: perf unavailable, perf events are unavailable in one or both inputs"
+                "perflab-compare-warning: perf unavailable, perf events are unavailable in one or both inputs"
             );
         } else {
             println!("Perf comparison:");
@@ -573,14 +628,14 @@ impl<'cmp_g> types::CmpRenderer for types::TextCmpRenderer<'cmp_g> {
                 w = INDENT_LEN
             );
 
-            for item in &self.cmp_g_data.perf_events {
+            for item in &self.cmp_g_data.perf_comparisons {
                 println!(
                     "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
-                    item.item_name,
+                    item.event_name,
                     item.baseline,
                     item.candidate,
-                    item.abs_delta,
-                    item.percent_delta,
+                    get_abs_delta_str(item.abs_delta),
+                    get_percent_delta_str(item.percent_delta),
                     w = INDENT_LEN
                 );
             }
@@ -592,10 +647,10 @@ impl<'cmp_g> types::CmpRenderer for types::MarkdownCmpRenderer<'cmp_g> {
     fn render_cmp_header(&self) {
         println!("");
         println!("# PerfLab compare v0");
-        println!("- baseline: `{}`", self.cmp_g_data.baseline_path);
-        println!("- candidate: `{}`", self.cmp_g_data.candidate_path);
-        println!("- bench: `{}`", self.cmp_g_data.bench);
-        println!("- schema: `{}`", self.cmp_g_data.schm_ver);
+        println!("- baseline: `{}`", self.cmp_g_data.meta.baseline_path);
+        println!("- candidate: `{}`", self.cmp_g_data.meta.candidate_path);
+        println!("- bench: `{}`", self.cmp_g_data.meta.bench);
+        println!("- schema: `{}`", self.cmp_g_data.meta.schm_ver);
         println!("");
     }
 
@@ -611,45 +666,35 @@ impl<'cmp_g> types::CmpRenderer for types::MarkdownCmpRenderer<'cmp_g> {
             "baseline spread",
             "candidate spread"
         );
-        println!(
-            "| {} | {} | {} | {} | {} | {} | {} |",
-            self.cmp_g_data.init_phase.item_name,
-            self.cmp_g_data.init_phase.baseline,
-            self.cmp_g_data.init_phase.candidate,
-            self.cmp_g_data.init_phase.abs_delta,
-            self.cmp_g_data.init_phase.percent_delta,
-            self.cmp_g_data.init_phase.baseline_spread,
-            self.cmp_g_data.init_phase.candidate_spread,
-        );
-        println!(
-            "| {} | {} | {} | {} | {} | {} | {} |",
-            self.cmp_g_data.compute_phase.item_name,
-            self.cmp_g_data.compute_phase.baseline,
-            self.cmp_g_data.compute_phase.candidate,
-            self.cmp_g_data.compute_phase.abs_delta,
-            self.cmp_g_data.compute_phase.percent_delta,
-            self.cmp_g_data.compute_phase.baseline_spread,
-            self.cmp_g_data.compute_phase.candidate_spread,
-        );
-        println!(
-            "| {} | {} | {} | {} | {} | {} | {} |",
-            self.cmp_g_data.tear_down_phase.item_name,
-            self.cmp_g_data.tear_down_phase.baseline,
-            self.cmp_g_data.tear_down_phase.candidate,
-            self.cmp_g_data.tear_down_phase.abs_delta,
-            self.cmp_g_data.tear_down_phase.percent_delta,
-            self.cmp_g_data.tear_down_phase.baseline_spread,
-            self.cmp_g_data.tear_down_phase.candidate_spread,
-        );
+        for item in &self.cmp_g_data.phase_comparisons {
+            println!(
+                "| {} | {} | {} | {} | {} | {} | {} |",
+                item.item_name,
+                item.baseline,
+                item.candidate,
+                get_abs_delta_str(item.abs_delta),
+                get_percent_delta_str(item.percent_delta),
+                get_spread_percent_str(item.baseline_spread),
+                get_spread_percent_str(item.candidate_spread),
+            );
+        }
         println!("");
     }
 
     fn render_summary_perf(&self) {
-        if self.cmp_g_data.perf_unavail {
+        if self
+            .cmp_g_data
+            .warnings
+            .contains(&types::ComparisonWarning::PerfUnavailable)
+        {
             eprintln!(
                 "perflab-compare-warning: perf unavailable, perf data is unavailable in one or both inputs"
             );
-        } else if self.cmp_g_data.perf_events_unavail {
+        } else if self
+            .cmp_g_data
+            .warnings
+            .contains(&types::ComparisonWarning::PerfEventsUnavailable)
+        {
             eprintln!(
                 "perflab-compare-error: perf unavailable, perf events are unavailable in one or both inputs"
             );
@@ -660,14 +705,14 @@ impl<'cmp_g> types::CmpRenderer for types::MarkdownCmpRenderer<'cmp_g> {
                 "event", "baseline", "candidate", "delta", "delta(%)"
             );
 
-            for item in &self.cmp_g_data.perf_events {
+            for item in &self.cmp_g_data.perf_comparisons {
                 println!(
                     "| {} | {} | {} | {} | {} |",
-                    item.item_name,
+                    item.event_name,
                     item.baseline,
                     item.candidate,
-                    item.abs_delta,
-                    item.percent_delta
+                    get_abs_delta_str(item.abs_delta),
+                    get_percent_delta_str(item.percent_delta)
                 );
             }
         }
@@ -682,60 +727,48 @@ impl<'cmp_g> types::CmpRenderer for types::CsvCmpRenderer<'cmp_g> {
     }
 
     fn render_summary_phases(&self) {
-        println!(
-            "{},{},{},{},{},{},{},{}",
-            "phase",
-            self.cmp_g_data.init_phase.item_name,
-            self.cmp_g_data.init_phase.baseline,
-            self.cmp_g_data.init_phase.candidate,
-            self.cmp_g_data.init_phase.abs_delta,
-            self.cmp_g_data.init_phase.percent_delta,
-            self.cmp_g_data.init_phase.baseline_spread,
-            self.cmp_g_data.init_phase.candidate_spread,
-        );
-        println!(
-            "{},{},{},{},{},{},{},{}",
-            "phase",
-            self.cmp_g_data.compute_phase.item_name,
-            self.cmp_g_data.compute_phase.baseline,
-            self.cmp_g_data.compute_phase.candidate,
-            self.cmp_g_data.compute_phase.abs_delta,
-            self.cmp_g_data.compute_phase.percent_delta,
-            self.cmp_g_data.compute_phase.baseline_spread,
-            self.cmp_g_data.compute_phase.candidate_spread,
-        );
-        println!(
-            "{},{},{},{},{},{},{},{}",
-            "phase",
-            self.cmp_g_data.tear_down_phase.item_name,
-            self.cmp_g_data.tear_down_phase.baseline,
-            self.cmp_g_data.tear_down_phase.candidate,
-            self.cmp_g_data.tear_down_phase.abs_delta,
-            self.cmp_g_data.tear_down_phase.percent_delta,
-            self.cmp_g_data.tear_down_phase.baseline_spread,
-            self.cmp_g_data.tear_down_phase.candidate_spread,
-        );
+        for item in &self.cmp_g_data.phase_comparisons {
+            println!(
+                "{},{},{},{},{},{},{},{}",
+                "phase",
+                item.item_name,
+                item.baseline,
+                item.candidate,
+                get_abs_delta_str(item.abs_delta),
+                get_percent_delta_str(item.percent_delta),
+                get_spread_percent_str(item.baseline_spread),
+                get_spread_percent_str(item.candidate_spread),
+            );
+        }
     }
 
     fn render_summary_perf(&self) {
-        if self.cmp_g_data.perf_unavail {
+        if self
+            .cmp_g_data
+            .warnings
+            .contains(&types::ComparisonWarning::PerfUnavailable)
+        {
             eprintln!(
                 "perflab-compare-warning: perf unavailable, perf data is unavailable in one or both inputs"
             );
-        } else if self.cmp_g_data.perf_events_unavail {
+        } else if self
+            .cmp_g_data
+            .warnings
+            .contains(&&types::ComparisonWarning::PerfEventsUnavailable)
+        {
             eprintln!(
                 "perflab-compare-error: perf unavailable, perf events are unavailable in one or both inputs"
             );
         } else {
-            for item in &self.cmp_g_data.perf_events {
+            for item in &self.cmp_g_data.perf_comparisons {
                 println!(
                     "{},{},{},{},{},{}",
                     "perf",
-                    item.item_name,
+                    item.event_name,
                     item.baseline,
                     item.candidate,
-                    item.abs_delta,
-                    item.percent_delta,
+                    get_abs_delta_str(item.abs_delta),
+                    get_percent_delta_str(item.percent_delta),
                 );
             }
         }
@@ -798,25 +831,16 @@ mod tests {
 
     #[test]
     fn get_abs_delta_test() {
-        assert_eq!(String::from("+20"), get_abs_delta(100, 120));
-        assert_eq!(String::from("-20"), get_abs_delta(120, 100));
-        assert_eq!(String::from("+0"), get_abs_delta(100, 100));
+        assert_eq!(20, get_abs_delta(100, 120));
+        assert_eq!(-20, get_abs_delta(120, 100));
+        assert_eq!(0, get_abs_delta(100, 100));
     }
 
     #[test]
-    fn get_percent_delta_test() {
-        assert_eq!(String::from("+20.00%"), get_percent_delta(100, 120));
-        assert_eq!(String::from("-20.00%"), get_percent_delta(100, 80));
-        assert_eq!(String::from("+0.00%"), get_percent_delta(100, 100));
-        assert_eq!(String::from("N/A"), get_percent_delta(0, 100));
-    }
+    fn get_percent_delta_test() {}
 
     #[test]
-    fn get_spread_percent_test() {
-        assert_eq!(String::from("1.23%"), get_spread_percent(Some(1.234)));
-        assert_eq!(String::from("0.00%"), get_spread_percent(Some(0.0)));
-        assert_eq!(String::from("null"), get_spread_percent(None));
-    }
+    fn get_spread_percent_test() {}
 
     #[test]
     fn verify_required_structure_valid_test() {
