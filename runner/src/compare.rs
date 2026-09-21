@@ -494,24 +494,14 @@ fn verify_summary_perf_avail(
     baseline: &types::RunnerJson,
     candidate: &types::RunnerJson,
 ) -> Option<types::ComparisonWarning> {
-    if let None = baseline.summary.perf {
-        Some(types::ComparisonWarning::PerfUnavailable)
-    } else if let None = candidate.summary.perf {
-        Some(types::ComparisonWarning::PerfUnavailable)
-    } else if let Some(perf_events) = baseline.summary.perf.as_ref() {
-        if perf_events.events.is_empty() {
+    match (&baseline.summary.perf, &candidate.summary.perf) {
+        (None, _) | (_, None) => Some(types::ComparisonWarning::PerfUnavailable),
+        (Some(baseline_perf), Some(candidate_perf))
+            if baseline_perf.events.is_empty() || candidate_perf.events.is_empty() =>
+        {
             Some(types::ComparisonWarning::PerfEventsUnavailable)
-        } else {
-            None
         }
-    } else if let Some(perf_events) = candidate.summary.perf.as_ref() {
-        if perf_events.events.is_empty() {
-            Some(types::ComparisonWarning::PerfEventsUnavailable)
-        } else {
-            None
-        }
-    } else {
-        None
+        _ => None,
     }
 }
 
@@ -754,7 +744,7 @@ impl<'cmp_g> types::CmpRenderer for types::CsvCmpRenderer<'cmp_g> {
         } else if self
             .cmp_g_data
             .warnings
-            .contains(&&types::ComparisonWarning::PerfEventsUnavailable)
+            .contains(&types::ComparisonWarning::PerfEventsUnavailable)
         {
             eprintln!(
                 "perflab-compare-error: perf unavailable, perf events are unavailable in one or both inputs"
@@ -837,10 +827,34 @@ mod tests {
     }
 
     #[test]
-    fn get_percent_delta_test() {}
+    fn get_percent_delta_test() {
+        assert_eq!(Some(20.0), get_percent_delta(100, 120));
+        assert_eq!(Some(-20.0), get_percent_delta(100, 80));
+        assert_eq!(Some(0.0), get_percent_delta(100, 100));
+        assert_eq!(None, get_percent_delta(0, 100));
+    }
 
     #[test]
-    fn get_spread_percent_test() {}
+    fn get_abs_delta_str_test() {
+        assert_eq!(String::from("+20"), get_abs_delta_str(20));
+        assert_eq!(String::from("-20"), get_abs_delta_str(-20));
+        assert_eq!(String::from("+0"), get_abs_delta_str(0));
+    }
+
+    #[test]
+    fn get_percent_delta_str_test() {
+        assert_eq!(String::from("+20.00%"), get_percent_delta_str(Some(20.0)));
+        assert_eq!(String::from("-20.00%"), get_percent_delta_str(Some(-20.0)));
+        assert_eq!(String::from("+0.00%"), get_percent_delta_str(Some(0.0)));
+        assert_eq!(String::from("N/A"), get_percent_delta_str(None));
+    }
+
+    #[test]
+    fn get_spread_percent_str_test() {
+        assert_eq!(String::from("1.23%"), get_spread_percent_str(Some(1.234)));
+        assert_eq!(String::from("0.00%"), get_spread_percent_str(Some(0.0)));
+        assert_eq!(String::from("null"), get_spread_percent_str(None));
+    }
 
     #[test]
     fn verify_required_structure_valid_test() {
@@ -1310,5 +1324,317 @@ mod tests {
             Ok(_) => panic!("expected input read error for directory path"),
             Err(other) => panic!("unexpected compare error: {other:?}"),
         }
+    }
+
+    #[test]
+    fn verify_good_to_have_matching_inputs_test() {
+        let baseline_json = valid_runner_json_value();
+        let candidate_json = valid_runner_json_value();
+
+        let baseline_data =
+            serde_json::to_string(&baseline_json).expect("failed to serialize baseline test JSON");
+        let candidate_data = serde_json::to_string(&candidate_json)
+            .expect("failed to serialize candidate test JSON");
+
+        let baseline = get_runner_json(
+            &baseline_data,
+            PathBuf::from("baseline.json"),
+            types::CmpInputSide::JsonBaseline,
+        )
+        .expect("baseline test JSON must deserialize");
+
+        let candidate = get_runner_json(
+            &candidate_data,
+            PathBuf::from("candidate.json"),
+            types::CmpInputSide::JsonCandidate,
+        )
+        .expect("candidate test JSON must deserialize");
+
+        assert!(verify_good_to_have(&baseline, &candidate).is_empty());
+    }
+
+    #[test]
+    fn verify_good_to_have_collects_metadata_warnings_test() {
+        let baseline_json = valid_runner_json_value();
+        let mut candidate_json = valid_runner_json_value();
+
+        *candidate_json.pointer_mut("/meta/compiler/path").unwrap() =
+            serde_json::json!("candidate-clang++");
+        *candidate_json
+            .pointer_mut("/meta/compiler/version")
+            .unwrap() = serde_json::json!("candidate-version");
+        *candidate_json.pointer_mut("/meta/compiler_args").unwrap() = serde_json::json!(["-O2"]);
+        *candidate_json.pointer_mut("/meta/cpu_pin").unwrap() = serde_json::json!(3);
+        *candidate_json.pointer_mut("/meta/warmup").unwrap() = serde_json::json!(2);
+        *candidate_json.pointer_mut("/meta/reps").unwrap() = serde_json::json!(5);
+        *candidate_json
+            .pointer_mut("/meta/perf_events_requested")
+            .unwrap() = serde_json::json!(["cycles:u"]);
+        *candidate_json.pointer_mut("/meta/workdir").unwrap() =
+            serde_json::json!("/candidate/workdir");
+        *candidate_json.pointer_mut("/meta/git_sha").unwrap() = serde_json::json!("candidate-sha");
+        *candidate_json.pointer_mut("/meta/uname").unwrap() = serde_json::json!("candidate-uname");
+
+        let baseline_data =
+            serde_json::to_string(&baseline_json).expect("failed to serialize baseline test JSON");
+        let candidate_data = serde_json::to_string(&candidate_json)
+            .expect("failed to serialize candidate test JSON");
+
+        let baseline = get_runner_json(
+            &baseline_data,
+            PathBuf::from("baseline.json"),
+            types::CmpInputSide::JsonBaseline,
+        )
+        .expect("baseline test JSON must deserialize");
+
+        let candidate = get_runner_json(
+            &candidate_data,
+            PathBuf::from("candidate.json"),
+            types::CmpInputSide::JsonCandidate,
+        )
+        .expect("candidate test JSON must deserialize");
+
+        let warnings = verify_good_to_have(&baseline, &candidate);
+
+        assert_eq!(10, warnings.len());
+        assert!(
+            warnings.contains(&types::ComparisonWarning::CompilerPathMismatch {
+                baseline: String::from("clang++"),
+                candidate: String::from("candidate-clang++"),
+            })
+        );
+        assert!(
+            warnings.contains(&types::ComparisonWarning::CompilerVersionMismatch {
+                baseline: String::from("test-version"),
+                candidate: String::from("candidate-version"),
+            })
+        );
+        assert!(
+            warnings.contains(&types::ComparisonWarning::CompilerArgsMismatch {
+                baseline: vec![String::from("-O3")],
+                candidate: vec![String::from("-O2")],
+            })
+        );
+        assert!(
+            warnings.contains(&types::ComparisonWarning::CpuPinMismatch {
+                baseline: Some(2),
+                candidate: Some(3),
+            })
+        );
+        assert!(
+            warnings.contains(&types::ComparisonWarning::WarmupMismatch {
+                baseline: 1,
+                candidate: 2,
+            })
+        );
+        assert!(warnings.contains(&types::ComparisonWarning::RepsMismatch {
+            baseline: 3,
+            candidate: 5,
+        }));
+        assert!(
+            warnings.contains(&types::ComparisonWarning::PerfEventsRequestedMismatch {
+                baseline: None,
+                candidate: Some(vec![String::from("cycles:u")]),
+            })
+        );
+        assert!(
+            warnings.contains(&types::ComparisonWarning::WorkdirMismatch {
+                baseline: String::from("/test/workdir"),
+                candidate: String::from("/candidate/workdir"),
+            })
+        );
+        assert!(
+            warnings.contains(&types::ComparisonWarning::GitShaMismatch {
+                baseline: String::from("test-sha"),
+                candidate: String::from("candidate-sha"),
+            })
+        );
+        assert!(warnings.contains(&types::ComparisonWarning::UnameMismatch {
+            baseline: String::from("test-uname"),
+            candidate: String::from("candidate-uname"),
+        }));
+    }
+
+    #[test]
+    fn verify_summary_perf_avail_test() {
+        let mut baseline_json = valid_runner_json_value();
+        let mut candidate_json = valid_runner_json_value();
+
+        let baseline_data =
+            serde_json::to_string(&baseline_json).expect("failed to serialize baseline test JSON");
+        let candidate_data = serde_json::to_string(&candidate_json)
+            .expect("failed to serialize candidate test JSON");
+
+        let baseline = get_runner_json(
+            &baseline_data,
+            PathBuf::from("baseline.json"),
+            types::CmpInputSide::JsonBaseline,
+        )
+        .expect("baseline test JSON must deserialize");
+        let candidate = get_runner_json(
+            &candidate_data,
+            PathBuf::from("candidate.json"),
+            types::CmpInputSide::JsonCandidate,
+        )
+        .expect("candidate test JSON must deserialize");
+
+        assert_eq!(
+            Some(types::ComparisonWarning::PerfUnavailable),
+            verify_summary_perf_avail(&baseline, &candidate)
+        );
+
+        *baseline_json.pointer_mut("/summary/perf").unwrap() =
+            serde_json::json!({"events": {"cycles": 100}});
+        *candidate_json.pointer_mut("/summary/perf").unwrap() =
+            serde_json::json!({"events": {"cycles": 120}});
+
+        let baseline_data =
+            serde_json::to_string(&baseline_json).expect("failed to serialize baseline test JSON");
+        let candidate_data = serde_json::to_string(&candidate_json)
+            .expect("failed to serialize candidate test JSON");
+
+        let baseline = get_runner_json(
+            &baseline_data,
+            PathBuf::from("baseline.json"),
+            types::CmpInputSide::JsonBaseline,
+        )
+        .expect("baseline test JSON must deserialize");
+        let candidate = get_runner_json(
+            &candidate_data,
+            PathBuf::from("candidate.json"),
+            types::CmpInputSide::JsonCandidate,
+        )
+        .expect("candidate test JSON must deserialize");
+
+        assert_eq!(None, verify_summary_perf_avail(&baseline, &candidate));
+
+        let mut baseline_empty_json = baseline_json.clone();
+        *baseline_empty_json
+            .pointer_mut("/summary/perf/events")
+            .unwrap() = serde_json::json!({});
+        let baseline_empty_data = serde_json::to_string(&baseline_empty_json)
+            .expect("failed to serialize baseline empty-events JSON");
+        let baseline_empty = get_runner_json(
+            &baseline_empty_data,
+            PathBuf::from("baseline-empty.json"),
+            types::CmpInputSide::JsonBaseline,
+        )
+        .expect("baseline empty-events JSON must deserialize");
+
+        assert_eq!(
+            Some(types::ComparisonWarning::PerfEventsUnavailable),
+            verify_summary_perf_avail(&baseline_empty, &candidate)
+        );
+
+        let mut candidate_empty_json = candidate_json.clone();
+        *candidate_empty_json
+            .pointer_mut("/summary/perf/events")
+            .unwrap() = serde_json::json!({});
+        let candidate_empty_data = serde_json::to_string(&candidate_empty_json)
+            .expect("failed to serialize candidate empty-events JSON");
+        let candidate_empty = get_runner_json(
+            &candidate_empty_data,
+            PathBuf::from("candidate-empty.json"),
+            types::CmpInputSide::JsonCandidate,
+        )
+        .expect("candidate empty-events JSON must deserialize");
+
+        assert_eq!(
+            Some(types::ComparisonWarning::PerfEventsUnavailable),
+            verify_summary_perf_avail(&baseline, &candidate_empty)
+        );
+    }
+
+    #[test]
+    fn get_phase_comparisons_test() {
+        let baseline_json = valid_runner_json_value();
+        let mut candidate_json = valid_runner_json_value();
+
+        *candidate_json
+            .pointer_mut("/summary/phases_ns/compute/median_ns")
+            .unwrap() = serde_json::json!(1100);
+        *candidate_json
+            .pointer_mut("/summary/phases_ns/compute/spread_percent")
+            .unwrap() = serde_json::json!(12.0);
+
+        let baseline_data =
+            serde_json::to_string(&baseline_json).expect("failed to serialize baseline test JSON");
+        let candidate_data = serde_json::to_string(&candidate_json)
+            .expect("failed to serialize candidate test JSON");
+
+        let baseline = get_runner_json(
+            &baseline_data,
+            PathBuf::from("baseline.json"),
+            types::CmpInputSide::JsonBaseline,
+        )
+        .expect("baseline test JSON must deserialize");
+        let candidate = get_runner_json(
+            &candidate_data,
+            PathBuf::from("candidate.json"),
+            types::CmpInputSide::JsonCandidate,
+        )
+        .expect("candidate test JSON must deserialize");
+
+        let phases = get_phase_comparisons(&baseline, &candidate);
+
+        assert_eq!(3, phases.len());
+        assert_eq!("init", phases[0].item_name);
+        assert_eq!("compute", phases[1].item_name);
+        assert_eq!("teardown", phases[2].item_name);
+
+        let compute = &phases[1];
+        assert_eq!(1000, compute.baseline);
+        assert_eq!(1100, compute.candidate);
+        assert_eq!(100, compute.abs_delta);
+        assert_eq!(Some(10.0), compute.percent_delta);
+        assert_eq!(Some(10.0), compute.baseline_spread);
+        assert_eq!(Some(12.0), compute.candidate_spread);
+    }
+
+    #[test]
+    fn get_perf_comparisons_test() {
+        let mut baseline_json = valid_runner_json_value();
+        let mut candidate_json = valid_runner_json_value();
+
+        *baseline_json.pointer_mut("/summary/perf").unwrap() =
+            serde_json::json!({"events": {"cycles": 100, "instructions": 200}});
+        *candidate_json.pointer_mut("/summary/perf").unwrap() =
+            serde_json::json!({"events": {"cycles": 120, "cache-misses": 50}});
+
+        let baseline_data =
+            serde_json::to_string(&baseline_json).expect("failed to serialize baseline test JSON");
+        let candidate_data = serde_json::to_string(&candidate_json)
+            .expect("failed to serialize candidate test JSON");
+
+        let baseline = get_runner_json(
+            &baseline_data,
+            PathBuf::from("baseline.json"),
+            types::CmpInputSide::JsonBaseline,
+        )
+        .expect("baseline test JSON must deserialize");
+        let candidate = get_runner_json(
+            &candidate_data,
+            PathBuf::from("candidate.json"),
+            types::CmpInputSide::JsonCandidate,
+        )
+        .expect("candidate test JSON must deserialize");
+
+        let perf = get_perf_comparisons(&baseline, &candidate, None);
+
+        assert_eq!(1, perf.len());
+        assert_eq!("cycles", perf[0].event_name);
+        assert_eq!(100, perf[0].baseline);
+        assert_eq!(120, perf[0].candidate);
+        assert_eq!(20, perf[0].abs_delta);
+        assert_eq!(Some(20.0), perf[0].percent_delta);
+
+        assert!(
+            get_perf_comparisons(
+                &baseline,
+                &candidate,
+                Some(types::ComparisonWarning::PerfUnavailable)
+            )
+            .is_empty()
+        );
     }
 }
