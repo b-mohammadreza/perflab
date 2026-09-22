@@ -76,3 +76,26 @@
 - compare: handle input file and JSON parsing failures without panicking.
 - test: add negative compare-input validation coverage.
 - validation: confirm valid text, Markdown, and CSV output remains unchanged.
+
+## 2026-09-14
+- results/schema v2: phase summaries now carry `median_ns`, `min_ns`, `max_ns`, and `spread_percent` for `init`, `compute`, and `teardown`.
+- summary: define zero-median spread behavior: all-zero samples produce `0`, while a zero median with any nonzero sample produces `null`.
+- test: expand Rust unit coverage for median/min/max/spread calculations and schema-v2 numeric/null spread serialization/deserialization.
+- test: add focused compare unit tests plus CLI integration tests for input validation, typed-deserialization paths, schema/benchmark compatibility, and fatal CLI behavior.
+- smoke: keep end-to-end coverage broad while moving detailed metric correctness and error-path checks into Rust tests.
+- docs: document layered testing responsibilities across Rust unit tests, CLI integration tests, and `scripts/smoke.py`.
+
+## 2026-09-21
+- compare: refactor generated comparison data around `ComparisonResult`, with separate phase comparisons, perf comparisons, comparison metadata, and structured warnings.
+- compare: preserve warnings as nonfatal diagnostics on standard error while keeping text, Markdown, and CSV reports on standard output.
+- compare: add a fixed `3.0%` base regression threshold.
+- compare: derive each runtime phase effective threshold as `max(base threshold, baseline spread, candidate spread)`.
+- compare: add per-phase verdicts: `REGRESSION`, `IMPROVEMENT`, `NO_MEANINGFUL_CHANGE`, and `UNAVAILABLE`; threshold boundaries are inclusive.
+- compare: mark verdict unavailable when the percentage delta or effective threshold cannot be derived.
+- compare: keep perf counters numeric-only in v0; perf rows do not receive thresholds or verdicts.
+- render: add base threshold, effective threshold, and verdict to text and Markdown phase reports.
+- render: extend CSV output with `effective_threshold_percent` and `verdict`; keep a consistent 10-column shape for both phase and perf rows.
+- test: add focused threshold/verdict, formatter, phase-comparison, warning, and perf-availability unit coverage.
+- smoke: validate threshold/verdict renderer integration without depending on a particular verdict from noisy real runs.
+- validation: `cargo fmt --check`, `cargo build`, 37 Rust unit tests, 5 CLI integration tests, and `./scripts/smoke.py` all pass.
+- next: environment/comparability validation is the next Priority 0 PerfLab item.

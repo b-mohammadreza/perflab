@@ -8,6 +8,7 @@ PerfLab is a compiler-to-performance lab for repeatable C/C++ benchmarking. It b
 - Phase summaries with median, min, max, and spread percentage
 - Optional Linux `perf stat` collection with graceful fallback to `null`
 - Result comparison in text, Markdown, and CSV formats
+- Noise-aware per-phase effective thresholds and regression verdicts
 - Explicit compare-input validation with non-panicking error handling
 ## Quick start
 From the repository root:
@@ -32,6 +33,6 @@ Run the current automated smoke suite with:
 Detailed setup, measurement, result-schema, comparison, validation, and testing instructions are in [`docs/USAGE.md`](docs/USAGE.md).
 ## Testing status
 PerfLab uses layered automated testing:
-- Rust unit tests cover internal comparison logic, input validation, deserialization, compatibility checks, and summary/noise-metric behavior.
+- Rust unit tests cover internal comparison logic, threshold/verdict classification, input validation, deserialization, compatibility checks, and summary/noise-metric behavior.
 - Rust integration tests exercise CLI behavior and representative fatal compare failures.
 - `./scripts/smoke.py` provides end-to-end coverage with real benchmark runs, generated result files, perf/no-perf flows, and text, Markdown, and CSV comparison output.

@@ -131,12 +131,13 @@ For timing values:
 - positive delta means the candidate is slower
 - negative delta means the candidate is faster
 Compare v0 checks that both inputs have the same `meta.schema_version` and `meta.bench`, then compares summary values.
-For runtime phases, delta calculations use `median_ns`. Compare also exposes baseline and candidate `spread_percent` values so measurement stability can be judged alongside the delta.
+For runtime phases, delta calculations use `median_ns`. Compare also exposes baseline and candidate `spread_percent` values and derives a noise-aware effective threshold and verdict for each phase.
 Compared fields:
 - `summary.phases_ns.init.median_ns`
 - `summary.phases_ns.compute.median_ns`
 - `summary.phases_ns.teardown.median_ns`
 - baseline and candidate phase `spread_percent`
+- derived effective threshold and verdict for each runtime phase
 - common keys in `summary.perf.events` when both inputs contain performance-counter data
 Min/max values remain in the result JSON but are not currently printed in the normal compare report.
 ### Output formats
@@ -146,16 +147,44 @@ perflab compare <baseline.json> <candidate.json> --format markdown
 perflab compare <baseline.json> <candidate.json> --format csv
 ```
 `text` is the default terminal report. `markdown` emits Markdown tables. `csv` emits rows suitable for spreadsheet import or later plotting.
-All three formats expose baseline and candidate phase spread information.
+All three formats expose baseline and candidate phase spread information, the effective threshold, and the phase verdict. Text and Markdown also show the fixed base threshold.
+CSV uses these columns:
+```text
+kind,name,baseline,candidate,delta,delta_percent,baseline_spread_percent,candidate_spread_percent,effective_threshold_percent,verdict
+```
+Phase rows populate all columns. Perf rows leave the spread, effective-threshold, and verdict columns empty.
+### Regression verdict policy
+Compare v0 applies verdicts only to runtime phases: `init`, `compute`, and `teardown`. Performance-counter rows are still compared numerically but do not receive verdicts.
+The fixed base threshold is:
+```text
+3.0%
+```
+For each runtime phase:
+```text
+effective_threshold = max(3.0%, baseline_spread, candidate_spread)
+```
+The percentage delta remains:
+```text
+delta_percent = (candidate_median - baseline_median) / baseline_median * 100
+```
+Classification is:
+- `delta_percent >= +effective_threshold` -> `REGRESSION`
+- `delta_percent <= -effective_threshold` -> `IMPROVEMENT`
+- otherwise -> `NO_MEANINGFUL_CHANGE`
+The threshold boundary is inclusive.
+A phase verdict is `UNAVAILABLE` when either:
+- percentage delta is unavailable, including when the baseline median is zero
+- baseline or candidate `spread_percent` is unavailable, so no effective threshold can be derived
+This policy is intentionally a conservative noise heuristic. It is not a confidence interval, a statistical-significance test, or a repeated-confirmation policy.
 ### Compare behavior
 - Performance-counter comparison is skipped if either input has `summary.perf: null`.
 - Missing performance-counter data is nonfatal and produces a warning.
 - Event keys are compared only when present in both inputs.
 - Missing event keys are not treated as zero.
 - Metadata differences such as compiler version, Git commit, host, CPU pin, repetitions, or requested events may produce warnings but do not stop comparison.
-- Phase spread values are informational only in the current version.
-- Compare does not yet classify a delta as noisy, suspicious, or confirmed.
-- Compare does not yet calculate confidence intervals, Median Absolute Deviation, regression thresholds, or automatic pass/fail verdicts.
+- Runtime-phase verdicts use the fixed base threshold plus both runs' observed phase spreads.
+- Perf counters do not receive verdicts in v0.
+- Compare does not yet calculate confidence intervals, Median Absolute Deviation, statistical significance, or an overall benchmark pass/fail verdict.
 ## Compare input validation
 Before typed deserialization, compare explicitly requires these JSON paths:
 - `meta.schema_version`
@@ -195,7 +224,9 @@ Add `.work/` to `.gitignore` before using it.
 PerfLab uses three levels of automated testing.
 ### Rust unit tests
 Unit tests cover internal logic including:
-- compare delta and spread formatting
+- compare delta, spread, threshold, and verdict formatting
+- effective-threshold calculation
+- regression, improvement, no-meaningful-change, unavailable, and threshold-boundary verdict cases
 - required-field validation
 - path-aware typed deserialization failures
 - schema and benchmark compatibility checks
@@ -218,4 +249,4 @@ Run the end-to-end suite with:
 ```bash
 ./scripts/smoke.py
 ```
-The smoke suite intentionally stays broader and smaller than the Rust tests. It exercises real benchmark runs, generated JSON results, perf and no-perf flows, and successful comparison output in text, Markdown, and CSV formats. Detailed validation and error-path cases belong primarily in the Rust unit and integration tests rather than being duplicated in the smoke suite.
+The smoke suite intentionally stays broader and smaller than the Rust tests. It exercises real benchmark runs, generated JSON results, perf and no-perf flows, and successful comparison output in text, Markdown, and CSV formats. It also checks that threshold/verdict fields are present in the rendered comparison formats without asserting a specific noise-dependent verdict from real benchmark runs. Detailed validation and error-path cases belong primarily in the Rust unit and integration tests rather than being duplicated in the smoke suite.
