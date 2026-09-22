@@ -151,6 +151,7 @@ pub enum CmpInputSide {
     JsonCandidate,
 }
 
+#[derive(Clone, Copy)]
 pub enum Verdict {
     Improvement,
     NoMeaningfulChange,

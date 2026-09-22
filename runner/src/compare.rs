@@ -590,6 +590,22 @@ fn get_spread_percent_str(spread: Option<f64>) -> String {
     }
 }
 
+fn get_threshold_percent_str(threshold: Option<f64>) -> String {
+    match threshold {
+        None => String::from("N/A"),
+        Some(val) => format!("{:.2}%", val).to_string(),
+    }
+}
+
+fn get_verdict_str(verdict: types::Verdict) -> String {
+    match verdict {
+        types::Verdict::Improvement => String::from("IMPROVEMENT"),
+        types::Verdict::Regression => String::from("REGRESSION"),
+        types::Verdict::NoMeaningfulChange => String::from("NO_MEANINGFUL_CHANGE"),
+        types::Verdict::Unavailable => String::from("UNAVAILABLE"),
+    }
+}
+
 /// To have all values formatted as json.
 pub fn format_warn_err_value<T>(value: &T) -> Result<String, types::CompareError>
 where
@@ -609,6 +625,10 @@ impl<'cmp_g> types::CmpRenderer for types::TextCmpRenderer<'cmp_g> {
         println!("\tcandidate:\t{}", self.cmp_g_data.meta.candidate_path);
         println!("\tbench:\t{}", self.cmp_g_data.meta.bench);
         println!("\tschema:\t{}", self.cmp_g_data.meta.schm_ver);
+        println!(
+            "\tbase threshold:\t{}",
+            get_threshold_percent_str(Some(self.cmp_g_data.meta.base_threshold))
+        );
         println!("");
     }
 
@@ -617,7 +637,7 @@ impl<'cmp_g> types::CmpRenderer for types::TextCmpRenderer<'cmp_g> {
 
         println!("Phase comparison:");
         println!(
-            "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
+            "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
             "phase",
             "baseline(ns)",
             "candidate(ns)",
@@ -625,11 +645,13 @@ impl<'cmp_g> types::CmpRenderer for types::TextCmpRenderer<'cmp_g> {
             "delta(%)",
             "baseline spread",
             "candidate spread",
+            "threshold",
+            "verdict",
             w = INDENT_LEN
         );
         for item in &self.cmp_g_data.phase_comparisons {
             println!(
-                "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
+                "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
                 item.item_name,
                 item.baseline,
                 item.candidate,
@@ -637,6 +659,8 @@ impl<'cmp_g> types::CmpRenderer for types::TextCmpRenderer<'cmp_g> {
                 get_percent_delta_str(item.percent_delta),
                 get_spread_percent_str(item.baseline_spread),
                 get_spread_percent_str(item.candidate_spread),
+                get_threshold_percent_str(item.effective_threshold),
+                get_verdict_str(item.verdict),
                 w = INDENT_LEN
             );
         }
@@ -697,24 +721,30 @@ impl<'cmp_g> types::CmpRenderer for types::MarkdownCmpRenderer<'cmp_g> {
         println!("- candidate: `{}`", self.cmp_g_data.meta.candidate_path);
         println!("- bench: `{}`", self.cmp_g_data.meta.bench);
         println!("- schema: `{}`", self.cmp_g_data.meta.schm_ver);
+        println!(
+            "- base threshold: `{}`",
+            get_threshold_percent_str(Some(self.cmp_g_data.meta.base_threshold))
+        );
         println!("");
     }
 
     fn render_summary_phases(&self) {
         println!("## Phase comparison:");
         println!(
-            "| {} | {} | {} | {} | {} | {} | {} |\n|---|---:|---:|---:|---:|---:|---:|",
+            "| {} | {} | {} | {} | {} | {} | {} | {} | {} |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|",
             "phase",
             "baseline(ns)",
             "candidate(ns)",
             "delta(ns)",
             "delta(%)",
             "baseline spread",
-            "candidate spread"
+            "candidate spread",
+            "threshold",
+            "verdict",
         );
         for item in &self.cmp_g_data.phase_comparisons {
             println!(
-                "| {} | {} | {} | {} | {} | {} | {} |",
+                "| {} | {} | {} | {} | {} | {} | {} | {} | {} |",
                 item.item_name,
                 item.baseline,
                 item.candidate,
@@ -722,6 +752,8 @@ impl<'cmp_g> types::CmpRenderer for types::MarkdownCmpRenderer<'cmp_g> {
                 get_percent_delta_str(item.percent_delta),
                 get_spread_percent_str(item.baseline_spread),
                 get_spread_percent_str(item.candidate_spread),
+                get_threshold_percent_str(item.effective_threshold),
+                get_verdict_str(item.verdict),
             );
         }
         println!("");
@@ -768,14 +800,14 @@ impl<'cmp_g> types::CmpRenderer for types::MarkdownCmpRenderer<'cmp_g> {
 impl<'cmp_g> types::CmpRenderer for types::CsvCmpRenderer<'cmp_g> {
     fn render_cmp_header(&self) {
         println!(
-            "kind,name,baseline,candidate,delta,delta_percent,baseline_spread_percent,candidate_spread_percent"
+            "kind,name,baseline,candidate,delta,delta_percent,baseline_spread_percent,candidate_spread_percent,effective_threshold_percent,verdict"
         );
     }
 
     fn render_summary_phases(&self) {
         for item in &self.cmp_g_data.phase_comparisons {
             println!(
-                "{},{},{},{},{},{},{},{}",
+                "{},{},{},{},{},{},{},{},{},{}",
                 "phase",
                 item.item_name,
                 item.baseline,
@@ -784,6 +816,8 @@ impl<'cmp_g> types::CmpRenderer for types::CsvCmpRenderer<'cmp_g> {
                 get_percent_delta_str(item.percent_delta),
                 get_spread_percent_str(item.baseline_spread),
                 get_spread_percent_str(item.candidate_spread),
+                get_threshold_percent_str(item.effective_threshold),
+                get_verdict_str(item.verdict),
             );
         }
     }
@@ -808,7 +842,7 @@ impl<'cmp_g> types::CmpRenderer for types::CsvCmpRenderer<'cmp_g> {
         } else {
             for item in &self.cmp_g_data.perf_comparisons {
                 println!(
-                    "{},{},{},{},{},{}",
+                    "{},{},{},{},{},{},,,,,",
                     "perf",
                     item.event_name,
                     item.baseline,
