@@ -842,7 +842,7 @@ impl<'cmp_g> types::CmpRenderer for types::CsvCmpRenderer<'cmp_g> {
         } else {
             for item in &self.cmp_g_data.perf_comparisons {
                 println!(
-                    "{},{},{},{},{},{},,,,,",
+                    "{},{},{},{},{},{},,,,",
                     "perf",
                     item.event_name,
                     item.baseline,
@@ -1006,6 +1006,36 @@ mod tests {
         assert_eq!(String::from("1.23%"), get_spread_percent_str(Some(1.234)));
         assert_eq!(String::from("0.00%"), get_spread_percent_str(Some(0.0)));
         assert_eq!(String::from("null"), get_spread_percent_str(None));
+    }
+
+    #[test]
+    fn get_threshold_percent_str_test() {
+        assert_eq!(String::from("3.00%"), get_threshold_percent_str(Some(3.0)));
+        assert_eq!(
+            String::from("12.35%"),
+            get_threshold_percent_str(Some(12.345))
+        );
+        assert_eq!(String::from("N/A"), get_threshold_percent_str(None));
+    }
+
+    #[test]
+    fn get_verdict_str_test() {
+        assert_eq!(
+            String::from("IMPROVEMENT"),
+            get_verdict_str(types::Verdict::Improvement)
+        );
+        assert_eq!(
+            String::from("REGRESSION"),
+            get_verdict_str(types::Verdict::Regression)
+        );
+        assert_eq!(
+            String::from("NO_MEANINGFUL_CHANGE"),
+            get_verdict_str(types::Verdict::NoMeaningfulChange)
+        );
+        assert_eq!(
+            String::from("UNAVAILABLE"),
+            get_verdict_str(types::Verdict::Unavailable)
+        );
     }
 
     #[test]

@@ -4,6 +4,7 @@ import os
 import sys
 import subprocess
 import json
+import csv
 from pathlib import Path
 
 # config - hard coded for now
@@ -241,6 +242,12 @@ def validate_compare_output_format_text(compare_output, expect_perf):
         fail("compare output missing baseline spread!")
     if "candidate spread" not in output:
         fail("compare output missing candidate spread!")
+    if "base threshold:" not in output:
+        fail("compare output missing base threshold!")
+    if "threshold" not in output:
+        fail("compare output missing effective threshold column!")
+    if "verdict" not in output:
+        fail("compare output missing verdict column!")
 
     if expect_perf:
         if "Perf comparison:" not in output:
@@ -268,6 +275,12 @@ def validate_compare_output_format_markdown(compare_output, expect_perf):
         fail("Markdown compare output missing baseline spread!")
     if "candidate spread" not in output:
         fail("Markdown compare output missing candidate spread!")
+    if "- base threshold:" not in output:
+        fail("Markdown compare output missing base threshold!")
+    if "threshold" not in output:
+        fail("Markdown compare output missing effective threshold column!")
+    if "verdict" not in output:
+        fail("Markdown compare output missing verdict column!")
 
     if expect_perf:
         if "## Perf comparison:" not in output:
@@ -296,8 +309,23 @@ def validate_compare_output_format_csv(compare_output, expect_perf):
     if "candidate:" in output:
         fail("CSV compare output contains candidate path!")
 
-    if "kind,name,baseline,candidate,delta,delta_percent,baseline_spread_percent,candidate_spread_percent" not in output:
-        fail("CSV compare output missing header/noise columns!")
+    expected_header = (
+        "kind,name,baseline,candidate,delta,delta_percent,"
+        "baseline_spread_percent,candidate_spread_percent,"
+        "effective_threshold_percent,verdict"
+    )
+    if expected_header not in output:
+        fail("CSV compare output missing threshold/verdict header columns!")
+
+    rows = list(csv.reader(output.splitlines()))
+    if not rows:
+        fail("CSV compare output is empty!")
+    if rows[0] != expected_header.split(","):
+        fail("CSV compare header columns are invalid!")
+    for row in rows[1:]:
+        if len(row) != 10:
+            fail(f"CSV compare row has {len(row)} columns instead of 10: {row}")
+
     if "phase,init," not in output:
         fail("CSV compare output missing init phase comparison!")
     if "phase,compute," not in output:
