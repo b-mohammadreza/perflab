@@ -891,6 +891,68 @@ mod tests {
     }
 
     #[test]
+    fn get_effective_threshold_test() {
+        assert_eq!(
+            Some(3.0),
+            get_effective_threshold(3.0, Some(1.0), Some(2.0))
+        );
+        assert_eq!(
+            Some(5.0),
+            get_effective_threshold(3.0, Some(5.0), Some(2.0))
+        );
+        assert_eq!(
+            Some(7.0),
+            get_effective_threshold(3.0, Some(5.0), Some(7.0))
+        );
+        assert_eq!(None, get_effective_threshold(3.0, None, Some(2.0)));
+        assert_eq!(None, get_effective_threshold(3.0, Some(2.0), None));
+        assert_eq!(None, get_effective_threshold(3.0, None, None));
+    }
+
+    #[test]
+    fn get_verdict_test() {
+        assert!(matches!(
+            get_verdict(Some(4.0), Some(3.0)),
+            types::Verdict::Regression
+        ));
+        assert!(matches!(
+            get_verdict(Some(-4.0), Some(3.0)),
+            types::Verdict::Improvement
+        ));
+        assert!(matches!(
+            get_verdict(Some(2.99), Some(3.0)),
+            types::Verdict::NoMeaningfulChange
+        ));
+        assert!(matches!(
+            get_verdict(Some(-2.99), Some(3.0)),
+            types::Verdict::NoMeaningfulChange
+        ));
+
+        // Threshold boundaries are inclusive.
+        assert!(matches!(
+            get_verdict(Some(3.0), Some(3.0)),
+            types::Verdict::Regression
+        ));
+        assert!(matches!(
+            get_verdict(Some(-3.0), Some(3.0)),
+            types::Verdict::Improvement
+        ));
+
+        assert!(matches!(
+            get_verdict(None, Some(3.0)),
+            types::Verdict::Unavailable
+        ));
+        assert!(matches!(
+            get_verdict(Some(4.0), None),
+            types::Verdict::Unavailable
+        ));
+        assert!(matches!(
+            get_verdict(None, None),
+            types::Verdict::Unavailable
+        ));
+    }
+
+    #[test]
     fn get_abs_delta_str_test() {
         assert_eq!(String::from("+20"), get_abs_delta_str(20));
         assert_eq!(String::from("-20"), get_abs_delta_str(-20));
@@ -1645,6 +1707,46 @@ mod tests {
         assert_eq!(Some(10.0), compute.percent_delta);
         assert_eq!(Some(10.0), compute.baseline_spread);
         assert_eq!(Some(12.0), compute.candidate_spread);
+        assert_eq!(Some(12.0), compute.effective_threshold);
+        assert!(matches!(
+            &compute.verdict,
+            types::Verdict::NoMeaningfulChange
+        ));
+    }
+
+    #[test]
+    fn get_phase_comparisons_unavailable_verdict_test() {
+        let mut baseline_json = valid_runner_json_value();
+        let candidate_json = valid_runner_json_value();
+
+        *baseline_json
+            .pointer_mut("/summary/phases_ns/compute/median_ns")
+            .unwrap() = serde_json::json!(0);
+
+        let baseline_data =
+            serde_json::to_string(&baseline_json).expect("failed to serialize baseline test JSON");
+        let candidate_data = serde_json::to_string(&candidate_json)
+            .expect("failed to serialize candidate test JSON");
+
+        let baseline = get_runner_json(
+            &baseline_data,
+            PathBuf::from("baseline.json"),
+            types::CmpInputSide::JsonBaseline,
+        )
+        .expect("baseline test JSON must deserialize");
+        let candidate = get_runner_json(
+            &candidate_data,
+            PathBuf::from("candidate.json"),
+            types::CmpInputSide::JsonCandidate,
+        )
+        .expect("candidate test JSON must deserialize");
+
+        let phases = get_phase_comparisons(&baseline, &candidate, 3.0);
+        let compute = &phases[1];
+
+        assert_eq!(None, compute.percent_delta);
+        assert_eq!(Some(10.0), compute.effective_threshold);
+        assert!(matches!(&compute.verdict, types::Verdict::Unavailable));
     }
 
     #[test]
