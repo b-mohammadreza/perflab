@@ -151,12 +151,20 @@ pub enum CmpInputSide {
     JsonCandidate,
 }
 
+pub enum Verdict {
+    Improvement,
+    NoMeaningfulChange,
+    Regression,
+    Unavailable,
+}
+
 #[derive(Default)]
 pub struct ComparisonMeta {
     pub baseline_path: String,
     pub candidate_path: String,
     pub bench: String,
     pub schm_ver: u32,
+    pub base_threshold: f64,
 }
 
 pub struct PhaseComparison {
@@ -167,6 +175,8 @@ pub struct PhaseComparison {
     pub percent_delta: Option<f64>,
     pub baseline_spread: Option<f64>,
     pub candidate_spread: Option<f64>,
+    pub effective_threshold: Option<f64>,
+    pub verdict: Verdict,
 }
 
 pub struct PerfComparison {

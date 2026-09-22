@@ -53,10 +53,15 @@ pub fn execute() -> Result<(), types::CompareError> {
     comparison_result.meta.candidate_path = cmp_args.candidate.to_string_lossy().trim().to_string();
     comparison_result.meta.bench = baseline_obj.meta.bench.clone();
     comparison_result.meta.schm_ver = baseline_obj.meta.schema_version.clone();
+    comparison_result.meta.base_threshold = 3.0;
 
     comparison_result.warnings = comparison_warnings;
 
-    comparison_result.phase_comparisons = get_phase_comparisons(&baseline_obj, &candidate_obj);
+    comparison_result.phase_comparisons = get_phase_comparisons(
+        &baseline_obj,
+        &candidate_obj,
+        comparison_result.meta.base_threshold,
+    );
     comparison_result.perf_comparisons =
         get_perf_comparisons(&baseline_obj, &candidate_obj, perf_warning);
 
@@ -400,9 +405,19 @@ fn verify_good_to_have(
 fn get_phase_comparisons(
     baseline: &types::RunnerJson,
     candidate: &types::RunnerJson,
+    base_threshold: f64,
 ) -> Vec<types::PhaseComparison> {
     let mut phase_comparisons: Vec<types::PhaseComparison> = Vec::new();
 
+    let init_delta_percent = get_percent_delta(
+        baseline.summary.phases_ns.init.median_ns,
+        candidate.summary.phases_ns.init.median_ns,
+    );
+    let init_effective_threshold = get_effective_threshold(
+        base_threshold,
+        baseline.summary.phases_ns.init.spread_percent,
+        candidate.summary.phases_ns.init.spread_percent,
+    );
     phase_comparisons.push(types::PhaseComparison {
         item_name: String::from("init"),
         baseline: baseline.summary.phases_ns.init.median_ns,
@@ -411,14 +426,22 @@ fn get_phase_comparisons(
             baseline.summary.phases_ns.init.median_ns,
             candidate.summary.phases_ns.init.median_ns,
         ),
-        percent_delta: get_percent_delta(
-            baseline.summary.phases_ns.init.median_ns,
-            candidate.summary.phases_ns.init.median_ns,
-        ),
+        percent_delta: init_delta_percent,
         baseline_spread: baseline.summary.phases_ns.init.spread_percent,
         candidate_spread: candidate.summary.phases_ns.init.spread_percent,
+        effective_threshold: init_effective_threshold,
+        verdict: get_verdict(init_delta_percent, init_effective_threshold),
     });
 
+    let compute_delta_percent = get_percent_delta(
+        baseline.summary.phases_ns.compute.median_ns,
+        candidate.summary.phases_ns.compute.median_ns,
+    );
+    let compute_effective_threshold = get_effective_threshold(
+        base_threshold,
+        baseline.summary.phases_ns.compute.spread_percent,
+        candidate.summary.phases_ns.compute.spread_percent,
+    );
     phase_comparisons.push(types::PhaseComparison {
         item_name: String::from("compute"),
         baseline: baseline.summary.phases_ns.compute.median_ns,
@@ -427,14 +450,22 @@ fn get_phase_comparisons(
             baseline.summary.phases_ns.compute.median_ns,
             candidate.summary.phases_ns.compute.median_ns,
         ),
-        percent_delta: get_percent_delta(
-            baseline.summary.phases_ns.compute.median_ns,
-            candidate.summary.phases_ns.compute.median_ns,
-        ),
+        percent_delta: compute_delta_percent,
         baseline_spread: baseline.summary.phases_ns.compute.spread_percent,
         candidate_spread: candidate.summary.phases_ns.compute.spread_percent,
+        effective_threshold: compute_effective_threshold,
+        verdict: get_verdict(compute_delta_percent, compute_effective_threshold),
     });
 
+    let teardown_delta_percent = get_percent_delta(
+        baseline.summary.phases_ns.teardown.median_ns,
+        candidate.summary.phases_ns.teardown.median_ns,
+    );
+    let teardown_effective_threshold = get_effective_threshold(
+        base_threshold,
+        baseline.summary.phases_ns.teardown.spread_percent,
+        candidate.summary.phases_ns.teardown.spread_percent,
+    );
     phase_comparisons.push(types::PhaseComparison {
         item_name: String::from("teardown"),
         baseline: baseline.summary.phases_ns.teardown.median_ns,
@@ -443,12 +474,11 @@ fn get_phase_comparisons(
             baseline.summary.phases_ns.teardown.median_ns,
             candidate.summary.phases_ns.teardown.median_ns,
         ),
-        percent_delta: get_percent_delta(
-            baseline.summary.phases_ns.teardown.median_ns,
-            candidate.summary.phases_ns.teardown.median_ns,
-        ),
+        percent_delta: teardown_delta_percent,
         baseline_spread: baseline.summary.phases_ns.teardown.spread_percent,
         candidate_spread: candidate.summary.phases_ns.teardown.spread_percent,
+        effective_threshold: teardown_effective_threshold,
+        verdict: get_verdict(teardown_delta_percent, teardown_effective_threshold),
     });
 
     phase_comparisons
@@ -509,15 +539,41 @@ fn get_abs_delta(baseline_phase: u64, candidate_phase: u64) -> i64 {
     candidate_phase as i64 - baseline_phase as i64
 }
 
-fn get_abs_delta_str(val: i64) -> String {
-    format!("{:+}", val).to_string()
-}
-
 fn get_percent_delta(baseline_phase: u64, candidate_phase: u64) -> Option<f64> {
     match baseline_phase {
         0 => None,
         _ => Some((candidate_phase as f64 - baseline_phase as f64) / baseline_phase as f64 * 100.0),
     }
+}
+
+fn get_effective_threshold(
+    base_threshold: f64,
+    baseline_spread: Option<f64>,
+    candidate_spread: Option<f64>,
+) -> Option<f64> {
+    match (baseline_spread, candidate_spread) {
+        (None, _) | (_, None) => None,
+        (Some(b_spread), Some(c_spread)) => Some(base_threshold.max(b_spread).max(c_spread)),
+    }
+}
+
+fn get_verdict(delta: Option<f64>, threshold: Option<f64>) -> types::Verdict {
+    match (delta, threshold) {
+        (None, _) | (_, None) => types::Verdict::Unavailable,
+        (Some(d), Some(t)) => {
+            if d >= t {
+                types::Verdict::Regression
+            } else if d <= -t {
+                types::Verdict::Improvement
+            } else {
+                types::Verdict::NoMeaningfulChange
+            }
+        }
+    }
+}
+
+fn get_abs_delta_str(val: i64) -> String {
+    format!("{:+}", val).to_string()
 }
 
 fn get_percent_delta_str(val: Option<f64>) -> String {
@@ -1575,7 +1631,7 @@ mod tests {
         )
         .expect("candidate test JSON must deserialize");
 
-        let phases = get_phase_comparisons(&baseline, &candidate);
+        let phases = get_phase_comparisons(&baseline, &candidate, 3.0);
 
         assert_eq!(3, phases.len());
         assert_eq!("init", phases[0].item_name);
