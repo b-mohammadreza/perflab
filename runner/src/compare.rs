@@ -964,6 +964,229 @@ mod tests {
         })
     }
 
+    // Unlike the older schema-validation fixture, this fixture has real samples
+    // so comparability checks can inspect the benchmark and workload parameters.
+    fn runner_with_workload_samples(count: usize) -> types::RunnerJson {
+        let mut value = valid_runner_json_value();
+        value["meta"]["reps"] = serde_json::json!(count);
+        value["samples"] = serde_json::Value::Array(
+            (0..count)
+                .map(|_| {
+                    serde_json::json!({
+                        "bench_output": {
+                            "bench": "matmul",
+                            "params": {"iters": 100, "n": 1000},
+                            "check": {"checksum": 42},
+                            "phases_ns": {"init": 100, "compute": 1000, "teardown": 50}
+                        },
+                        "perf": null
+                    })
+                })
+                .collect(),
+        );
+        serde_json::from_value(value).expect("valid workload test fixture must deserialize")
+    }
+
+    #[test]
+    fn verify_sample_workload_one_sample_test() {
+        let input = runner_with_workload_samples(1);
+        let params = verify_sample_workload_consistency(&input, types::CmpInputSide::JsonCandidate)
+            .expect("one valid sample must be accepted");
+        assert_eq!(
+            params,
+            types::BenchParams {
+                iters: 100,
+                n: 1000
+            }
+        );
+    }
+
+    #[test]
+    fn verify_sample_workload_multiple_consistent_samples_test() {
+        let input = runner_with_workload_samples(3);
+        let params = verify_sample_workload_consistency(&input, types::CmpInputSide::JsonBaseline)
+            .expect("consistent samples must be accepted");
+        assert_eq!(
+            params,
+            types::BenchParams {
+                iters: 100,
+                n: 1000
+            }
+        );
+    }
+
+    #[test]
+    fn verify_sample_workload_empty_samples_test() {
+        let input = runner_with_workload_samples(0);
+        for (side, expect_baseline) in [
+            (types::CmpInputSide::JsonBaseline, true),
+            (types::CmpInputSide::JsonCandidate, false),
+        ] {
+            match verify_sample_workload_consistency(&input, side) {
+                Err(types::CompareError::EmptySample { input }) => {
+                    assert_eq!(
+                        matches!(input, types::CmpInputSide::JsonBaseline),
+                        expect_baseline,
+                    );
+                }
+                other => panic!("expected EmptySample, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn verify_sample_workload_benchmark_mismatch_test() {
+        let mut input = runner_with_workload_samples(3);
+        input.samples[1].bench_output.bench = "reduce".to_string();
+        match verify_sample_workload_consistency(&input, types::CmpInputSide::JsonCandidate) {
+            Err(types::CompareError::SampleBenchmarkMismatch {
+                input,
+                sample_index,
+                expected_bench,
+                actual_bench,
+            }) => {
+                assert!(matches!(input, types::CmpInputSide::JsonCandidate));
+                assert_eq!(sample_index, 1);
+                assert_eq!(expected_bench, "matmul");
+                assert_eq!(actual_bench, "reduce");
+            }
+            other => panic!("expected SampleBenchmarkMismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn verify_sample_workload_checks_first_sample_benchmark_test() {
+        let mut input = runner_with_workload_samples(3);
+        input.samples[0].bench_output.bench = "reduce".to_string();
+        match verify_sample_workload_consistency(&input, types::CmpInputSide::JsonBaseline) {
+            Err(types::CompareError::SampleBenchmarkMismatch { sample_index, .. }) => {
+                assert_eq!(sample_index, 0);
+            }
+            other => panic!("expected sample 0 benchmark mismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn verify_sample_workload_iters_mismatch_test() {
+        let mut input = runner_with_workload_samples(3);
+        input.samples[2].bench_output.params.iters = 200;
+        match verify_sample_workload_consistency(&input, types::CmpInputSide::JsonBaseline) {
+            Err(types::CompareError::InconsistentSampleParams {
+                input,
+                sample_index,
+                expected_params,
+                actual_params,
+            }) => {
+                assert!(matches!(input, types::CmpInputSide::JsonBaseline));
+                assert_eq!(sample_index, 2);
+                assert_eq!(
+                    expected_params,
+                    types::BenchParams {
+                        iters: 100,
+                        n: 1000
+                    }
+                );
+                assert_eq!(
+                    actual_params,
+                    types::BenchParams {
+                        iters: 200,
+                        n: 1000
+                    }
+                );
+            }
+            other => panic!("expected InconsistentSampleParams, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn verify_sample_workload_n_mismatch_test() {
+        let mut input = runner_with_workload_samples(2);
+        input.samples[1].bench_output.params.n = 2000;
+        match verify_sample_workload_consistency(&input, types::CmpInputSide::JsonCandidate) {
+            Err(types::CompareError::InconsistentSampleParams {
+                input,
+                sample_index,
+                expected_params,
+                actual_params,
+            }) => {
+                assert!(matches!(input, types::CmpInputSide::JsonCandidate));
+                assert_eq!(sample_index, 1);
+                assert_eq!(
+                    expected_params,
+                    types::BenchParams {
+                        iters: 100,
+                        n: 1000
+                    }
+                );
+                assert_eq!(
+                    actual_params,
+                    types::BenchParams {
+                        iters: 100,
+                        n: 2000
+                    }
+                );
+            }
+            other => panic!("expected InconsistentSampleParams, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn verify_workload_params_match_equal_test() {
+        let baseline = types::BenchParams {
+            iters: 100,
+            n: 1000,
+        };
+        let candidate = types::BenchParams {
+            iters: 100,
+            n: 1000,
+        };
+        assert!(verify_workload_params_match(&baseline, &candidate).is_ok());
+    }
+
+    #[test]
+    fn verify_workload_params_match_iters_mismatch_test() {
+        let baseline = types::BenchParams {
+            iters: 100,
+            n: 1000,
+        };
+        let candidate = types::BenchParams {
+            iters: 200,
+            n: 1000,
+        };
+        match verify_workload_params_match(&baseline, &candidate) {
+            Err(types::CompareError::WorkloadParamsMismatch {
+                baseline_params,
+                candidate_params,
+            }) => {
+                assert_eq!(baseline_params, baseline);
+                assert_eq!(candidate_params, candidate);
+            }
+            other => panic!("expected WorkloadParamsMismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn verify_workload_params_match_n_mismatch_test() {
+        let baseline = types::BenchParams {
+            iters: 100,
+            n: 1000,
+        };
+        let candidate = types::BenchParams {
+            iters: 100,
+            n: 2000,
+        };
+        match verify_workload_params_match(&baseline, &candidate) {
+            Err(types::CompareError::WorkloadParamsMismatch {
+                baseline_params,
+                candidate_params,
+            }) => {
+                assert_eq!(baseline_params, baseline);
+                assert_eq!(candidate_params, candidate);
+            }
+            other => panic!("expected WorkloadParamsMismatch, got {other:?}"),
+        }
+    }
+
     #[test]
     fn get_abs_delta_test() {
         assert_eq!(20, get_abs_delta(100, 120));
