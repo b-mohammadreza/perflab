@@ -39,6 +39,13 @@ pub fn execute() -> Result<(), types::CompareError> {
 
     verify_required(&baseline_obj, &candidate_obj)?;
 
+    let b_bench_params =
+        verify_sample_workload_consistency(&baseline_obj, types::CmpInputSide::JsonBaseline)?;
+    let c_bench_params =
+        verify_sample_workload_consistency(&candidate_obj, types::CmpInputSide::JsonCandidate)?;
+
+    verify_workload_params_match(&b_bench_params, &c_bench_params)?;
+
     let mut comparison_warnings: Vec<types::ComparisonWarning> =
         verify_good_to_have(&baseline_obj, &candidate_obj);
 
@@ -532,6 +539,54 @@ fn verify_summary_perf_avail(
             Some(types::ComparisonWarning::PerfEventsUnavailable)
         }
         _ => None,
+    }
+}
+
+fn verify_sample_workload_consistency(
+    input: &types::RunnerJson,
+    input_side: types::CmpInputSide,
+) -> Result<types::BenchParams, types::CompareError> {
+    match input.samples.len() {
+        0 => Err(types::CompareError::EmptySample { input: input_side }),
+        _ => {
+            let e_params: &types::BenchParams = &input.samples[0].bench_output.params;
+            let e_bench = &input.meta.bench;
+
+            for (index, sample) in input.samples.iter().enumerate() {
+                if sample.bench_output.bench != *e_bench {
+                    return Err(types::CompareError::SampleBenchmarkMismatch {
+                        input: input_side,
+                        sample_index: index,
+                        expected_bench: e_bench.clone(),
+                        actual_bench: sample.bench_output.bench.clone(),
+                    });
+                }
+                if sample.bench_output.params != *e_params {
+                    return Err(types::CompareError::InconsistentSampleParams {
+                        input: input_side,
+                        sample_index: index,
+                        expected_params: e_params.clone(),
+                        actual_params: sample.bench_output.params.clone(),
+                    });
+                }
+            }
+
+            Ok(e_params.clone())
+        }
+    }
+}
+
+fn verify_workload_params_match(
+    b_params: &types::BenchParams,
+    c_params: &types::BenchParams,
+) -> Result<(), types::CompareError> {
+    if b_params != c_params {
+        Err(types::CompareError::WorkloadParamsMismatch {
+            baseline_params: b_params.clone(),
+            candidate_params: c_params.clone(),
+        })
+    } else {
+        Ok(())
     }
 }
 
