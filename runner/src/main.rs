@@ -123,49 +123,123 @@ fn dispach_cmd(args: config::Commands) {
                             baseline_bench,
                             candidate_bench,
                         } => {
-                            let b_bench: String = match compare::format_warn_err_value(
-                                &baseline_bench,
-                            ) {
-                                Ok(bench) => bench,
-                                Err(err) => {
-                                    match err {
-                                        types::CompareError::NotImplSerdeSerialize { source } => {
-                                            eprintln!(
-                                                "perflab-compare-error: Value({}) is not implementing serde::Serialize trait! Error:\n\t{}",
-                                                baseline_bench, source
-                                            );
-                                        }
-                                        _ => {}
-                                    }
-                                    std::process::exit(1);
-                                }
-                            };
-                            let c_bench: String = match compare::format_warn_err_value(
-                                &candidate_bench,
-                            ) {
-                                Ok(bench) => bench,
-                                Err(err) => {
-                                    match err {
-                                        types::CompareError::NotImplSerdeSerialize { source } => {
-                                            eprintln!(
-                                                "perflab-compare-error: Value({}) is not implementing serde::Serialize trait! Error:\n\t{}",
-                                                candidate_bench, source
-                                            );
-                                        }
-                                        _ => {}
-                                    }
-                                    std::process::exit(1);
-                                }
-                            };
                             eprintln!(
                                 "perflab-compare-error: Benchmark mismatch, \n\tbaseline=\t{} \n\tcandidate=\t{}",
-                                b_bench, c_bench
+                                baseline_bench, candidate_bench
                             );
                         }
                         types::CompareError::NotImplSerdeSerialize { source } => {
                             eprintln!(
                                 "perflab-compare-error: The value is not implementing serde::Serialize trait! Error:\n\t{}",
                                 source
+                            );
+                        }
+                        types::CompareError::EmptySample { input } => {
+                            let input_side = compare::get_input_side_str(&input);
+                            eprintln!(
+                                "perflab-compare-error: Empty sample!\n\tInput side:\t{}",
+                                input_side
+                            );
+                        }
+                        types::CompareError::SampleBenchmarkMismatch {
+                            input,
+                            sample_index,
+                            expected_bench,
+                            actual_bench,
+                        } => {
+                            let input_side = compare::get_input_side_str(&input);
+                            eprintln!(
+                                "perflab-compare-error: Sample benchmark mismatch!\n\tInput side:\t{}\n\tSample index:\t{}\n\tExpected bench:\t{}\n\tActual bench:\t{}",
+                                input_side, sample_index, expected_bench, actual_bench
+                            );
+                        }
+                        types::CompareError::InconsistentSampleParams {
+                            input,
+                            sample_index,
+                            expected_params,
+                            actual_params,
+                        } => {
+                            let input_side = compare::get_input_side_str(&input);
+                            let e_params: String = match compare::format_warn_err_value(
+                                &expected_params,
+                            ) {
+                                Ok(params) => params,
+                                Err(err) => {
+                                    match err {
+                                        types::CompareError::NotImplSerdeSerialize { source } => {
+                                            eprintln!(
+                                                "perflab-compare-error: Value (expected_params) is not implementing serde::Serialize trait! Error:\n\t{}",
+                                                source
+                                            );
+                                        }
+                                        _ => {}
+                                    }
+                                    std::process::exit(1);
+                                }
+                            };
+                            let a_params: String = match compare::format_warn_err_value(
+                                &actual_params,
+                            ) {
+                                Ok(params) => params,
+                                Err(err) => {
+                                    match err {
+                                        types::CompareError::NotImplSerdeSerialize { source } => {
+                                            eprintln!(
+                                                "perflab-compare-error: Value (actual_params) is not implementing serde::Serialize trait! Error:\n\t{}",
+                                                source
+                                            );
+                                        }
+                                        _ => {}
+                                    }
+                                    std::process::exit(1);
+                                }
+                            };
+                            eprintln!(
+                                "perflab-compare-error: Inconsistence sample params!\n\tInput side:\t{}\n\tSample index:\t{}\n\tExpected params:\t{}\n\tActual params:\t{}",
+                                input_side, sample_index, e_params, a_params
+                            );
+                        }
+                        types::CompareError::WorkloadParamsMismatch {
+                            baseline_params,
+                            candidate_params,
+                        } => {
+                            let b_params: String = match compare::format_warn_err_value(
+                                &baseline_params,
+                            ) {
+                                Ok(params) => params,
+                                Err(err) => {
+                                    match err {
+                                        types::CompareError::NotImplSerdeSerialize { source } => {
+                                            eprintln!(
+                                                "perflab-compare-error: Value (baseline_params) is not implementing serde::Serialize trait! Error:\n\t{}",
+                                                source
+                                            );
+                                        }
+                                        _ => {}
+                                    }
+                                    std::process::exit(1);
+                                }
+                            };
+                            let c_params: String = match compare::format_warn_err_value(
+                                &candidate_params,
+                            ) {
+                                Ok(params) => params,
+                                Err(err) => {
+                                    match err {
+                                        types::CompareError::NotImplSerdeSerialize { source } => {
+                                            eprintln!(
+                                                "perflab-compare-error: Value (candidate_params) is not implementing serde::Serialize trait! Error:\n\t{}",
+                                                source
+                                            );
+                                        }
+                                        _ => {}
+                                    }
+                                    std::process::exit(1);
+                                }
+                            };
+                            eprintln!(
+                                "perflab-compare-error: Workload params mismatch!\n\tBaseline params:\t{}\n\tCandidate params:\t{}",
+                                b_params, c_params
                             );
                         }
                     }

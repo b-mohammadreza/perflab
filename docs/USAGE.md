@@ -130,7 +130,7 @@ delta = candidate - baseline
 For timing values:
 - positive delta means the candidate is slower
 - negative delta means the candidate is faster
-Compare v0 checks that both inputs have the same `meta.schema_version` and `meta.bench`, then compares summary values.
+Compare v0 checks that both inputs have the same `meta.schema_version` and `meta.bench` and validates matching, internally consistent workloads before comparing summary values.
 For runtime phases, delta calculations use `median_ns`. Compare also exposes baseline and candidate `spread_percent` values and derives a noise-aware effective threshold and verdict for each phase.
 Compared fields:
 - `summary.phases_ns.init.median_ns`
@@ -185,6 +185,15 @@ This policy is intentionally a conservative noise heuristic. It is not a confide
 - Runtime-phase verdicts use the fixed base threshold plus both runs' observed phase spreads.
 - Perf counters do not receive verdicts in v0.
 - Compare does not yet calculate confidence intervals, Median Absolute Deviation, statistical significance, or an overall benchmark pass/fail verdict.
+### Workload comparability validation
+Before producing phase comparisons or regression verdicts, Compare v0 validates the measured workload in both input files:
+- Each input must contain at least one measured sample in `samples[]`. An empty array is a fatal `EmptySample` error because workload identity cannot be established.
+- Every sample's `bench_output.bench` must match its run's `meta.bench`. A mismatch is a fatal `SampleBenchmarkMismatch` error.
+- All samples within a single run must have identical `bench_output.params.iters` and `bench_output.params.n`. A mismatch is a fatal `InconsistentSampleParams` error.
+- Once both runs are internally consistent, baseline and candidate must have identical `iters` and `n`. A mismatch is a fatal `WorkloadParamsMismatch` error.
+The validator reports the input side and zero-based sample index for sample-specific errors. Workload mismatches stop comparison before phase deltas, thresholds, or verdicts are generated.
+Compiler path/version/flags, CPU pinning, host, warmup/repetition configuration, Git SHA, and requested perf-event differences may produce warnings but do not, by themselves, block comparison: these differences can be intentional or are not treated as workload-identity failures in v1.
+This v1 check does not independently validate that `samples[]` length matches `meta.reps`, verify benchmark checksums, or assess statistical confidence.
 ## Compare input validation
 Before typed deserialization, compare explicitly requires these JSON paths:
 - `meta.schema_version`
@@ -205,6 +214,7 @@ Fatal compare failures include:
 - typed deserialization failure
 - schema mismatch
 - benchmark mismatch
+- empty measured samples, sample benchmark mismatch, inconsistent sample workload parameters, or baseline/candidate workload-parameter mismatch
 ## Output streams and exit status
 - Successful comparison report: standard output
 - Warnings, including unavailable performance-counter data: standard error
@@ -230,6 +240,7 @@ Unit tests cover internal logic including:
 - required-field validation
 - path-aware typed deserialization failures
 - schema and benchmark compatibility checks
+- within-run workload consistency and between-run workload-parameter checks
 - input read failures
 - median, minimum, maximum, and spread calculations
 - zero-median spread behavior
@@ -239,7 +250,7 @@ Run them with:
 cargo test -p perflab
 ```
 ### Rust CLI integration tests
-Integration tests under `runner/tests/` exercise the built `perflab` command-line interface, including representative fatal compare failures and exit/error behavior.
+Integration tests under `runner/tests/` exercise the built `perflab` command-line interface, including representative fatal compare failures, successful workload comparisons, metadata-warning behavior, and exit/error behavior.
 Run the compare integration tests with:
 ```bash
 cargo test -p perflab --test compare_cli

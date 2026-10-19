@@ -99,3 +99,9 @@
 - smoke: validate threshold/verdict renderer integration without depending on a particular verdict from noisy real runs.
 - validation: `cargo fmt --check`, `cargo build`, 37 Rust unit tests, 5 CLI integration tests, and `./scripts/smoke.py` all pass.
 - next: environment/comparability validation is the next Priority 0 PerfLab item.
+## 2026-10-19
+- compare: add workload comparability validation before emitting phase comparisons and regression verdicts.
+- compare: reject missing samples, per-sample benchmark mismatches, inconsistent workload parameters within a run, and baseline/candidate workload-parameter mismatches as fatal errors.
+- compare: add structured errors `EmptySample`, `SampleBenchmarkMismatch`, `InconsistentSampleParams`, and `WorkloadParamsMismatch`; retain nonfatal warnings for compiler and environment metadata differences.
+- test: add 10 focused Rust unit tests for within-run consistency and between-run workload identity, plus 7 CLI integration tests for valid and invalid comparisons.
+- validation: `cargo fmt`, `cargo build`, 47 Rust unit tests, 12 CLI integration tests, and `./scripts/smoke.py` all pass (including perf/no-perf flows and text/Markdown/CSV output).

@@ -61,7 +61,7 @@ pub struct Bench {
     pub phases_ns: BenchPhasesNs,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BenchParams {
     pub iters: u32,
     pub n: u64,
@@ -297,5 +297,24 @@ pub enum CompareError {
     },
     NotImplSerdeSerialize {
         source: serde_json::Error,
+    },
+    EmptySample {
+        input: CmpInputSide,
+    },
+    SampleBenchmarkMismatch {
+        input: CmpInputSide,
+        sample_index: usize,
+        expected_bench: String,
+        actual_bench: String,
+    },
+    InconsistentSampleParams {
+        input: CmpInputSide,
+        sample_index: usize,
+        expected_params: BenchParams,
+        actual_params: BenchParams,
+    },
+    WorkloadParamsMismatch {
+        baseline_params: BenchParams,
+        candidate_params: BenchParams,
     },
 }
