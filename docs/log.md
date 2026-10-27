@@ -105,3 +105,13 @@
 - compare: add structured errors `EmptySample`, `SampleBenchmarkMismatch`, `InconsistentSampleParams`, and `WorkloadParamsMismatch`; retain nonfatal warnings for compiler and environment metadata differences.
 - test: add 10 focused Rust unit tests for within-run consistency and between-run workload identity, plus 7 CLI integration tests for valid and invalid comparisons.
 - validation: `cargo fmt`, `cargo build`, 47 Rust unit tests, 12 CLI integration tests, and `./scripts/smoke.py` all pass (including perf/no-perf flows and text/Markdown/CSV output).
+
+## 2026-10-26
+- compare: add whole-process instructions per cycle (IPC) as a derived diagnostic metric, without changing the result JSON schema or phase-regression verdict policy.
+- compare: calculate per-repetition IPC using paired `cpu_core/instructions/u` and `cpu_core/cycles/u` events; use the median of valid per-repetition ratios for each run.
+- compare: ignore missing perf data, missing required events, and zero-cycle repetitions; count zero instructions with positive cycles as valid IPC `0.0`.
+- compare: track baseline and candidate IPC measurement coverage independently as valid/total repetitions, with `N/A` when IPC or a delta is unavailable.
+- compare: compute candidate-minus-baseline IPC deltas and percentage changes where baseline IPC is nonzero; keep IPC diagnostic-only (no verdict).
+- render: report IPC, deltas, and coverage in text, Markdown, and CSV formats; preserve the existing 10-column CSV schema with `derived` and `derived_coverage` rows.
+- test: add 16 Rust unit tests for IPC aggregation, comparison, and generic delta handling, plus 5 CLI integration tests for text/Markdown/CSV and missing-perf scenarios.
+- validation: `cargo fmt`, `cargo build`, 63 Rust unit tests, 17 CLI integration tests, `git diff --check`, and `python3 scripts/smoke.py` all pass (including matmul and reduce perf runs, no-perf comparison, and all three output formats).

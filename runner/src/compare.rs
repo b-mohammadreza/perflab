@@ -2319,4 +2319,313 @@ mod tests {
             .is_empty()
         );
     }
+
+    // IPC fixtures use the same workload samples as the existing comparison tests.
+    // The perf event map is process-wide, not compute-phase-only.
+    fn runner_with_ipc_samples(samples: &[Option<Vec<(&str, u64)>>]) -> types::RunnerJson {
+        let mut runner = runner_with_workload_samples(samples.len());
+        for (sample, counters) in runner.samples.iter_mut().zip(samples.iter()) {
+            sample.perf = counters.as_ref().map(|counters| types::Perf {
+                csv_path: "test-perf.csv".to_string(),
+                perf_stat_args: vec![],
+                perf_events: types::PerfEvents {
+                    events: counters
+                        .iter()
+                        .map(|(name, count)| ((*name).to_string(), *count))
+                        .collect(),
+                },
+            });
+        }
+        runner
+    }
+
+    fn assert_run_ipc(
+        result: types::RunIpcResult,
+        median: Option<f64>,
+        valid: usize,
+        total: usize,
+    ) {
+        assert_eq!(result.median_ipc, median);
+        assert_eq!(result.valid_count, valid);
+        assert_eq!(result.total_count, total);
+    }
+
+    #[test]
+    fn get_run_ipc_three_valid_repetitions_test() {
+        let runner = runner_with_ipc_samples(&[
+            Some(vec![
+                ("cpu_core/instructions/u", 1000),
+                ("cpu_core/cycles/u", 500),
+            ]),
+            Some(vec![
+                ("cpu_core/instructions/u", 1200),
+                ("cpu_core/cycles/u", 800),
+            ]),
+            Some(vec![
+                ("cpu_core/instructions/u", 900),
+                ("cpu_core/cycles/u", 600),
+            ]),
+        ]);
+        assert_run_ipc(get_run_ipc(&runner), Some(1.5), 3, 3);
+    }
+
+    #[test]
+    fn get_run_ipc_even_number_of_repetitions_test() {
+        let runner = runner_with_ipc_samples(&[
+            Some(vec![
+                ("cpu_core/instructions/u", 1000),
+                ("cpu_core/cycles/u", 500),
+            ]),
+            Some(vec![
+                ("cpu_core/instructions/u", 900),
+                ("cpu_core/cycles/u", 600),
+            ]),
+        ]);
+        assert_run_ipc(get_run_ipc(&runner), Some(1.75), 2, 2);
+    }
+
+    #[test]
+    fn get_run_ipc_median_of_ratios_not_ratio_of_totals_test() {
+        // Per-repetition IPCs are 1, 10, and 1, while pooled instructions/cycles = 4.
+        let runner = runner_with_ipc_samples(&[
+            Some(vec![
+                ("cpu_core/instructions/u", 100),
+                ("cpu_core/cycles/u", 100),
+            ]),
+            Some(vec![
+                ("cpu_core/instructions/u", 1000),
+                ("cpu_core/cycles/u", 100),
+            ]),
+            Some(vec![
+                ("cpu_core/instructions/u", 100),
+                ("cpu_core/cycles/u", 100),
+            ]),
+        ]);
+        assert_run_ipc(get_run_ipc(&runner), Some(1.0), 3, 3);
+    }
+
+    #[test]
+    fn get_run_ipc_missing_perf_repetition_test() {
+        let runner = runner_with_ipc_samples(&[
+            Some(vec![
+                ("cpu_core/instructions/u", 1000),
+                ("cpu_core/cycles/u", 500),
+            ]),
+            None,
+            Some(vec![
+                ("cpu_core/instructions/u", 900),
+                ("cpu_core/cycles/u", 600),
+            ]),
+        ]);
+        assert_run_ipc(get_run_ipc(&runner), Some(1.75), 2, 3);
+    }
+
+    #[test]
+    fn get_run_ipc_missing_instructions_event_test() {
+        let runner = runner_with_ipc_samples(&[
+            Some(vec![
+                ("cpu_core/instructions/u", 1000),
+                ("cpu_core/cycles/u", 500),
+            ]),
+            Some(vec![("cpu_core/cycles/u", 600)]),
+            Some(vec![
+                ("cpu_core/instructions/u", 800),
+                ("cpu_core/cycles/u", 400),
+            ]),
+        ]);
+        assert_run_ipc(get_run_ipc(&runner), Some(2.0), 2, 3);
+    }
+
+    #[test]
+    fn get_run_ipc_missing_cycles_event_test() {
+        let runner = runner_with_ipc_samples(&[
+            Some(vec![
+                ("cpu_core/instructions/u", 1000),
+                ("cpu_core/cycles/u", 500),
+            ]),
+            Some(vec![("cpu_core/instructions/u", 700)]),
+        ]);
+        assert_run_ipc(get_run_ipc(&runner), Some(2.0), 1, 2);
+    }
+
+    #[test]
+    fn get_run_ipc_zero_cycles_invalid_test() {
+        let runner = runner_with_ipc_samples(&[
+            Some(vec![
+                ("cpu_core/instructions/u", 1000),
+                ("cpu_core/cycles/u", 0),
+            ]),
+            Some(vec![
+                ("cpu_core/instructions/u", 600),
+                ("cpu_core/cycles/u", 300),
+            ]),
+        ]);
+        assert_run_ipc(get_run_ipc(&runner), Some(2.0), 1, 2);
+    }
+
+    #[test]
+    fn get_run_ipc_zero_instructions_valid_test() {
+        let runner = runner_with_ipc_samples(&[
+            Some(vec![
+                ("cpu_core/instructions/u", 0),
+                ("cpu_core/cycles/u", 500),
+            ]),
+            Some(vec![
+                ("cpu_core/instructions/u", 1000),
+                ("cpu_core/cycles/u", 500),
+            ]),
+        ]);
+        assert_run_ipc(get_run_ipc(&runner), Some(1.0), 2, 2);
+    }
+
+    #[test]
+    fn get_run_ipc_all_repetitions_invalid_test() {
+        let runner = runner_with_ipc_samples(&[
+            None,
+            Some(vec![]),
+            Some(vec![
+                ("cpu_core/instructions/u", 1000),
+                ("cpu_core/cycles/u", 0),
+            ]),
+        ]);
+        assert_run_ipc(get_run_ipc(&runner), None, 0, 3);
+
+        let empty = runner_with_ipc_samples(&[]);
+        assert_run_ipc(get_run_ipc(&empty), None, 0, 0);
+    }
+
+    #[test]
+    fn get_run_ipc_requires_exact_event_names_test() {
+        let runner = runner_with_ipc_samples(&[
+            Some(vec![
+                ("cpu_core/instructions", 1000),
+                ("cpu_core/cycles/u", 500),
+            ]),
+            Some(vec![
+                ("cpu_core/instructions/u", 1200),
+                ("cpu_core/cycles", 600),
+            ]),
+            Some(vec![
+                ("cpu_core/instructions/u", 900),
+                ("cpu_core/cycles/u", 600),
+            ]),
+        ]);
+        assert_run_ipc(get_run_ipc(&runner), Some(1.5), 1, 3);
+    }
+
+    #[test]
+    fn get_ipc_comparison_decrease_and_coverage_test() {
+        let baseline = types::RunIpcResult {
+            median_ipc: Some(2.0),
+            valid_count: 3,
+            total_count: 3,
+        };
+        let candidate = types::RunIpcResult {
+            median_ipc: Some(1.5),
+            valid_count: 2,
+            total_count: 3,
+        };
+        let result = get_ipc_comparison(&baseline, &candidate);
+        assert_eq!(result.name, "ipc");
+        assert_eq!(result.baseline, Some(2.0));
+        assert_eq!(result.candidate, Some(1.5));
+        assert_eq!(result.delta, Some(-0.5));
+        assert_eq!(result.delta_percent, Some(-25.0));
+        assert_eq!((result.baseline_valid, result.baseline_total), (3, 3));
+        assert_eq!((result.candidate_valid, result.candidate_total), (2, 3));
+    }
+
+    #[test]
+    fn get_ipc_comparison_increase_test() {
+        let baseline = types::RunIpcResult {
+            median_ipc: Some(1.0),
+            valid_count: 1,
+            total_count: 2,
+        };
+        let candidate = types::RunIpcResult {
+            median_ipc: Some(1.25),
+            valid_count: 2,
+            total_count: 2,
+        };
+        let result = get_ipc_comparison(&baseline, &candidate);
+        assert_eq!(result.delta, Some(0.25));
+        assert_eq!(result.delta_percent, Some(25.0));
+    }
+
+    #[test]
+    fn get_ipc_comparison_both_unavailable_test() {
+        let baseline = types::RunIpcResult {
+            median_ipc: None,
+            valid_count: 0,
+            total_count: 3,
+        };
+        let candidate = types::RunIpcResult {
+            median_ipc: None,
+            valid_count: 0,
+            total_count: 5,
+        };
+        let result = get_ipc_comparison(&baseline, &candidate);
+        assert_eq!(result.baseline, None);
+        assert_eq!(result.candidate, None);
+        assert_eq!(result.delta, None);
+        assert_eq!(result.delta_percent, None);
+        assert_eq!((result.baseline_valid, result.baseline_total), (0, 3));
+        assert_eq!((result.candidate_valid, result.candidate_total), (0, 5));
+    }
+
+    #[test]
+    fn get_ipc_comparison_one_side_unavailable_test() {
+        for (baseline_ipc, candidate_ipc) in [(None, Some(2.0)), (Some(2.0), None)] {
+            let baseline = types::RunIpcResult {
+                median_ipc: baseline_ipc,
+                valid_count: usize::from(baseline_ipc.is_some()),
+                total_count: 3,
+            };
+            let candidate = types::RunIpcResult {
+                median_ipc: candidate_ipc,
+                valid_count: usize::from(candidate_ipc.is_some()),
+                total_count: 3,
+            };
+            let result = get_ipc_comparison(&baseline, &candidate);
+            assert_eq!(result.baseline, baseline_ipc);
+            assert_eq!(result.candidate, candidate_ipc);
+            assert_eq!(result.delta, None);
+            assert_eq!(result.delta_percent, None);
+        }
+    }
+
+    #[test]
+    fn get_ipc_comparison_zero_baseline_test() {
+        let baseline = types::RunIpcResult {
+            median_ipc: Some(0.0),
+            valid_count: 1,
+            total_count: 1,
+        };
+        let candidate = types::RunIpcResult {
+            median_ipc: Some(1.5),
+            valid_count: 1,
+            total_count: 1,
+        };
+        let result = get_ipc_comparison(&baseline, &candidate);
+        assert_eq!(result.delta, Some(1.5));
+        assert_eq!(result.delta_percent, None);
+
+        let result_reverse = get_ipc_comparison(&candidate, &baseline);
+        assert_eq!(result_reverse.delta, Some(-1.5));
+        assert_eq!(result_reverse.delta_percent, Some(-100.0));
+    }
+
+    #[test]
+    fn generic_delta_integer_bounds_and_float_test() {
+        let max = u64::MAX;
+        assert_eq!(get_delta(0_u64, max), i128::from(max));
+        assert_eq!(get_delta(max, 0_u64), -i128::from(max));
+        assert_eq!(get_delta(1.25_f64, 1.75_f64), 0.5);
+        assert_eq!(get_percent_delta(100_u64, 125_u64), Some(25.0));
+        assert_eq!(get_percent_delta(2.0_f64, 1.5_f64), Some(-25.0));
+        assert_eq!(get_percent_delta(0.0_f64, 1.0_f64), None);
+        assert_eq!(get_3_dec_float_str(None), "N/A");
+        assert_eq!(get_3_dec_float_delta_str(Some(-0.5)), "-0.500");
+        assert_eq!(get_3_dec_float_delta_str(None), "N/A");
+    }
 }

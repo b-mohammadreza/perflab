@@ -351,3 +351,165 @@ fn compare_compiler_args_mismatch_is_warning_cli_test() {
         "stderr: {stderr}"
     );
 }
+
+// Whole-process IPC samples use the exact perf event keys and flattened
+// per-sample `perf.events` JSON representation used by the runner.
+fn ipc_workload_runner_json_value(samples: &[Option<(u64, u64)>]) -> serde_json::Value {
+    let mut value = valid_workload_runner_json_value();
+    assert_eq!(samples.len(), 3, "integration fixture has three samples");
+    for (sample, counts) in value["samples"]
+        .as_array_mut()
+        .expect("test samples must be an array")
+        .iter_mut()
+        .zip(samples.iter())
+    {
+        if let Some((instructions, cycles)) = counts {
+            sample["perf"] = serde_json::json!({
+                "csv_path": "test-perf.csv",
+                "perf_stat_args": [],
+                "events": {
+                    "cpu_core/instructions/u": instructions,
+                    "cpu_core/cycles/u": cycles
+                }
+            });
+        }
+    }
+    value
+}
+
+#[test]
+fn compare_ipc_text_report_cli_test() {
+    let baseline =
+        ipc_workload_runner_json_value(&[Some((1000, 500)), Some((1000, 500)), Some((1000, 500))]);
+    let candidate = ipc_workload_runner_json_value(&[Some((900, 600)), None, Some((900, 600))]);
+    let output = run_compare_fixture("ipc-text", &baseline, &candidate, "text");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        stdout.contains("Derived metrics (whole process):"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("2.000"), "{stdout}");
+    assert!(stdout.contains("1.500"), "{stdout}");
+    assert!(stdout.contains("-0.500"), "{stdout}");
+    assert!(stdout.contains("-25.00%"), "{stdout}");
+    assert!(stdout.contains("baseline:\t3/3"), "{stdout}");
+    assert!(stdout.contains("candidate:\t2/3"), "{stdout}");
+}
+
+#[test]
+fn compare_ipc_markdown_report_cli_test() {
+    let baseline =
+        ipc_workload_runner_json_value(&[Some((1000, 500)), Some((1000, 500)), Some((1000, 500))]);
+    let candidate =
+        ipc_workload_runner_json_value(&[Some((900, 600)), Some((900, 600)), Some((900, 600))]);
+    let output = run_compare_fixture("ipc-markdown", &baseline, &candidate, "markdown");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        stdout.contains("## Derived metrics (whole process):"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("|---|---:|---:|---:|---:|"), "{stdout}");
+    assert!(
+        stdout.contains("| ipc | 2.000 | 1.500 | -0.500 | -25.00% |"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("- ipc - baseline: 3/3 valid; candidate: 3/3 valid"),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn compare_ipc_csv_report_cli_test() {
+    let baseline =
+        ipc_workload_runner_json_value(&[Some((1000, 500)), Some((1000, 500)), Some((1000, 500))]);
+    let candidate =
+        ipc_workload_runner_json_value(&[Some((900, 600)), Some((900, 600)), Some((900, 600))]);
+    let output = run_compare_fixture("ipc-csv", &baseline, &candidate, "csv");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        stdout.starts_with("kind,name,baseline,candidate,delta,delta_percent,"),
+        "{stdout}"
+    );
+    assert!(
+        stdout
+            .lines()
+            .any(|line| line == "derived,ipc,2.000,1.500,-0.500,-25.00%,,,,"),
+        "{stdout}"
+    );
+    assert!(
+        stdout
+            .lines()
+            .any(|line| line == "derived_coverage,ipc,3/3,3/3,,,,,,"),
+        "{stdout}"
+    );
+    for line in stdout.lines() {
+        assert_eq!(
+            line.split(',').count(),
+            10,
+            "invalid CSV column count: {line}"
+        );
+    }
+}
+
+#[test]
+fn compare_ipc_csv_partially_missing_perf_cli_test() {
+    let baseline =
+        ipc_workload_runner_json_value(&[Some((1000, 500)), Some((1000, 500)), Some((1000, 500))]);
+    let candidate = ipc_workload_runner_json_value(&[Some((900, 600)), None, Some((900, 600))]);
+    let output = run_compare_fixture("ipc-partial-perf", &baseline, &candidate, "csv");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        stdout
+            .lines()
+            .any(|line| line == "derived,ipc,2.000,1.500,-0.500,-25.00%,,,,"),
+        "{stdout}"
+    );
+    assert!(
+        stdout
+            .lines()
+            .any(|line| line == "derived_coverage,ipc,3/3,2/3,,,,,,"),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn compare_ipc_no_perf_keeps_derived_metrics_cli_test() {
+    let baseline = valid_workload_runner_json_value();
+    let candidate = valid_workload_runner_json_value();
+    let output = run_compare_fixture("ipc-no-perf", &baseline, &candidate, "markdown");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        stdout.contains("| ipc | N/A | N/A | N/A | N/A |"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("- ipc - baseline: 0/3 valid; candidate: 0/3 valid"),
+        "{stdout}"
+    );
+}

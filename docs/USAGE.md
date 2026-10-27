@@ -92,7 +92,7 @@ Each sample contains:
 When performance-counter collection succeeds, `perf` contains:
 - `csv_path` — path to the per-repetition CSV artifact under `out/`
 - `perf_stat_args` — arguments passed to `perf stat`
-- `events` — parsed event counters
+- `perf_events.events` — map of parsed event counters
 For schema v2, each runtime phase under `summary.phases_ns` contains:
 - `median_ns`
 - `min_ns`
@@ -139,7 +139,33 @@ Compared fields:
 - baseline and candidate phase `spread_percent`
 - derived effective threshold and verdict for each runtime phase
 - common keys in `summary.perf.events` when both inputs contain performance-counter data
+- derived whole-process instructions per cycle (IPC), calculated from paired per-repetition counters, plus valid/total coverage
 Min/max values remain in the result JSON but are not currently printed in the normal compare report.
+### Derived metrics: IPC
+Compare v0 reports **instructions per cycle (IPC)** as a diagnostic derived metric for the **whole benchmark process**, not just the `compute` phase. The comparison computes IPC from raw per-repetition counters in `samples[].perf.perf_events.events`; it does not add an IPC field to the result JSON schema and does not calculate IPC by dividing the `summary.perf` median counters.
+
+For each measured repetition, use the exact event keys:
+- `cpu_core/instructions/u` — user-space retired instructions
+- `cpu_core/cycles/u` — user-space CPU cycles
+
+A repetition contributes an IPC measurement only if `perf` exists, both event keys are present, and cycles are greater than zero. **Zero instructions with positive cycles is valid** and yields IPC `0.0`. Skip samples with absent perf data, absent event keys, or zero cycles; do not substitute `cpu_atom/*` or other event names for the required keys.
+
+```text
+sample_ipc = instructions / cycles
+run_ipc = median(valid sample_ipc values)
+coverage = valid repetitions / all measured repetitions
+```
+
+The run IPC is the **median of per-repetition ratios**, not the ratio of counter medians, nor the ratio of counter totals. Coverage is tracked separately for baseline and candidate (for example, `3/5 valid`). If a run has no valid IPC measurements, its IPC is unavailable and displayed as `N/A`; comparison still succeeds.
+
+Compare baseline and candidate using:
+```text
+ipc_delta = candidate_run_ipc - baseline_run_ipc
+ipc_delta_percent = ipc_delta / baseline_run_ipc * 100
+```
+
+An absolute IPC delta is available only when both run IPC values exist. A percentage delta additionally requires a nonzero baseline IPC. If the baseline is zero and the candidate is available, the absolute delta is still reported while the percentage is `N/A`. IPC is diagnostic only: it does **not** receive a `REGRESSION` or `IMPROVEMENT` verdict, does not affect runtime-phase verdicts, and is not a compute-phase throughput measurement.
+
 ### Output formats
 ```bash
 perflab compare <baseline.json> <candidate.json> --format text
@@ -148,13 +174,23 @@ perflab compare <baseline.json> <candidate.json> --format csv
 ```
 `text` is the default terminal report. `markdown` emits Markdown tables. `csv` emits rows suitable for spreadsheet import or later plotting.
 All three formats expose baseline and candidate phase spread information, the effective threshold, and the phase verdict. Text and Markdown also show the fixed base threshold.
+All three formats also report derived IPC, its absolute and percentage deltas, and baseline/candidate valid/total measurement coverage. Missing IPC values and unavailable deltas are displayed as `N/A`; numerical IPC values and absolute IPC deltas use three decimal places, and percentage deltas use two decimal places.
 CSV uses these columns:
 ```text
 kind,name,baseline,candidate,delta,delta_percent,baseline_spread_percent,candidate_spread_percent,effective_threshold_percent,verdict
 ```
-Phase rows populate all columns. Perf rows leave the spread, effective-threshold, and verdict columns empty.
+The 10-column CSV layout is unchanged. Phase rows populate all columns. Perf rows leave the spread, effective-threshold, and verdict columns empty. IPC adds two kinds of rows:
+- `derived` — `name=ipc`, baseline and candidate run IPCs, absolute delta, and percentage delta; spread, threshold, and verdict columns are empty.
+- `derived_coverage` — `name=ipc`, `baseline` and `candidate` hold `valid/total` (such as `3/5`); all other data columns are empty.
+
+For example:
+```csv
+kind,name,baseline,candidate,delta,delta_percent,baseline_spread_percent,candidate_spread_percent,effective_threshold_percent,verdict
+derived,ipc,2.000,1.800,-0.200,-10.00%,,,,
+derived_coverage,ipc,5/5,3/5,,,,,,
+```
 ### Regression verdict policy
-Compare v0 applies verdicts only to runtime phases: `init`, `compute`, and `teardown`. Performance-counter rows are still compared numerically but do not receive verdicts.
+Compare v0 applies verdicts only to runtime phases: `init`, `compute`, and `teardown`. Performance-counter and derived IPC rows are compared numerically but do not receive verdicts.
 The fixed base threshold is:
 ```text
 3.0%
@@ -183,7 +219,7 @@ This policy is intentionally a conservative noise heuristic. It is not a confide
 - Missing event keys are not treated as zero.
 - Metadata differences such as compiler version, Git commit, host, CPU pin, repetitions, or requested events may produce warnings but do not stop comparison.
 - Runtime-phase verdicts use the fixed base threshold plus both runs' observed phase spreads.
-- Perf counters do not receive verdicts in v0.
+- Perf counters and derived IPC do not receive verdicts in v0.
 - Compare does not yet calculate confidence intervals, Median Absolute Deviation, statistical significance, or an overall benchmark pass/fail verdict.
 ### Workload comparability validation
 Before producing phase comparisons or regression verdicts, Compare v0 validates the measured workload in both input files:
@@ -245,12 +281,14 @@ Unit tests cover internal logic including:
 - median, minimum, maximum, and spread calculations
 - zero-median spread behavior
 - schema-v2 numeric/null spread representation
+- IPC per-repetition pairing, median of valid ratios, even-number medians, missing perf/events, zero cycles, zero instructions, exact event-key matching, and valid/total coverage
+- derived IPC comparison with positive/negative deltas, zero baselines, unavailable values, and generic integer/float delta calculations
 Run them with:
 ```bash
 cargo test -p perflab
 ```
 ### Rust CLI integration tests
-Integration tests under `runner/tests/` exercise the built `perflab` command-line interface, including representative fatal compare failures, successful workload comparisons, metadata-warning behavior, and exit/error behavior.
+Integration tests under `runner/tests/` exercise the built `perflab` command-line interface, including representative fatal compare failures, successful workload comparisons, metadata-warning behavior, and exit/error behavior. They also verify IPC reporting in text, Markdown, and CSV, including unavailable or partially missing perf measurements and the fixed 10-column CSV layout.
 Run the compare integration tests with:
 ```bash
 cargo test -p perflab --test compare_cli
@@ -260,4 +298,6 @@ Run the end-to-end suite with:
 ```bash
 ./scripts/smoke.py
 ```
-The smoke suite intentionally stays broader and smaller than the Rust tests. It exercises real benchmark runs, generated JSON results, perf and no-perf flows, and successful comparison output in text, Markdown, and CSV formats. It also checks that threshold/verdict fields are present in the rendered comparison formats without asserting a specific noise-dependent verdict from real benchmark runs. Detailed validation and error-path cases belong primarily in the Rust unit and integration tests rather than being duplicated in the smoke suite.
+The smoke suite intentionally stays broader and smaller than the Rust tests. It exercises real benchmark runs, generated JSON results, perf and no-perf flows, and successful comparison output in text, Markdown, and CSV formats, including derived IPC and measurement coverage. It also checks that threshold/verdict fields are present in the rendered comparison formats without asserting a specific noise-dependent verdict from real benchmark runs. Detailed validation and error-path cases belong primarily in the Rust unit and integration tests rather than being duplicated in the smoke suite.
+
+As of 2026-10-26, validation completed successfully with **63 Rust unit tests**, **17 CLI integration tests**, `cargo build`, `git diff --check`, and `python3 scripts/smoke.py` (matmul/reduce perf runs plus matmul no-perf comparison).
