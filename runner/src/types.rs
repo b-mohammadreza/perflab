@@ -172,7 +172,7 @@ pub struct PhaseComparison {
     pub item_name: String,
     pub baseline: u64,
     pub candidate: u64,
-    pub abs_delta: i64,
+    pub delta: i128,
     pub percent_delta: Option<f64>,
     pub baseline_spread: Option<f64>,
     pub candidate_spread: Option<f64>,
@@ -184,8 +184,28 @@ pub struct PerfComparison {
     pub event_name: String,
     pub baseline: u64,
     pub candidate: u64,
-    pub abs_delta: i64,
+    pub delta: i128,
     pub percent_delta: Option<f64>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct DerivedMetricComparison {
+    pub name: String,
+    pub baseline: Option<f64>,
+    pub candidate: Option<f64>,
+    pub delta: Option<f64>,
+    pub delta_percent: Option<f64>,
+    pub baseline_valid: usize,
+    pub baseline_total: usize,
+    pub candidate_valid: usize,
+    pub candidate_total: usize,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RunIpcResult {
+    pub median_ipc: Option<f64>,
+    pub valid_count: usize,
+    pub total_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -240,6 +260,7 @@ pub struct ComparisonResult {
     pub phase_comparisons: Vec<PhaseComparison>,
     pub perf_comparisons: Vec<PerfComparison>,
     pub warnings: Vec<ComparisonWarning>,
+    pub derived_comparisons: Vec<DerivedMetricComparison>,
 }
 
 pub trait CmpRenderer {
@@ -247,11 +268,13 @@ pub trait CmpRenderer {
         self.render_cmp_header();
         self.render_summary_phases();
         self.render_summary_perf();
+        self.render_derived_metrics();
     }
 
     fn render_cmp_header(&self);
     fn render_summary_phases(&self);
     fn render_summary_perf(&self);
+    fn render_derived_metrics(&self);
 }
 
 pub struct TextCmpRenderer<'cmp_g> {
@@ -264,6 +287,28 @@ pub struct MarkdownCmpRenderer<'cmp_g> {
 
 pub struct CsvCmpRenderer<'cmp_g> {
     pub cmp_g_data: &'cmp_g ComparisonResult,
+}
+
+pub trait Delta {
+    type Output;
+
+    fn delta(baseline: Self, candidate: Self) -> Self::Output;
+}
+
+impl Delta for u64 {
+    type Output = i128;
+
+    fn delta(baseline: u64, candidate: u64) -> i128 {
+        i128::from(candidate) - i128::from(baseline)
+    }
+}
+
+impl Delta for f64 {
+    type Output = f64;
+
+    fn delta(baseline: f64, candidate: f64) -> f64 {
+        candidate - baseline
+    }
 }
 
 #[derive(Debug)]

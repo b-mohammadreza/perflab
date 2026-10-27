@@ -1,6 +1,9 @@
 use crate::config;
 use crate::io;
+use crate::summary;
 use crate::types;
+use num_traits::ToPrimitive;
+use ordered_float::OrderedFloat;
 use serde_json;
 use std::path::PathBuf;
 
@@ -71,6 +74,11 @@ pub fn execute() -> Result<(), types::CompareError> {
     );
     comparison_result.perf_comparisons =
         get_perf_comparisons(&baseline_obj, &candidate_obj, perf_warning);
+
+    let baseline_ipc = get_run_ipc(&baseline_obj);
+    let candidate_ipc = get_run_ipc(&candidate_obj);
+    let derived_comp = get_ipc_comparison(&baseline_ipc, &candidate_ipc);
+    comparison_result.derived_comparisons.push(derived_comp);
 
     render_warnings(&comparison_result.warnings)?;
 
@@ -429,7 +437,7 @@ fn get_phase_comparisons(
         item_name: String::from("init"),
         baseline: baseline.summary.phases_ns.init.median_ns,
         candidate: candidate.summary.phases_ns.init.median_ns,
-        abs_delta: get_abs_delta(
+        delta: get_delta(
             baseline.summary.phases_ns.init.median_ns,
             candidate.summary.phases_ns.init.median_ns,
         ),
@@ -453,7 +461,7 @@ fn get_phase_comparisons(
         item_name: String::from("compute"),
         baseline: baseline.summary.phases_ns.compute.median_ns,
         candidate: candidate.summary.phases_ns.compute.median_ns,
-        abs_delta: get_abs_delta(
+        delta: get_delta(
             baseline.summary.phases_ns.compute.median_ns,
             candidate.summary.phases_ns.compute.median_ns,
         ),
@@ -477,7 +485,7 @@ fn get_phase_comparisons(
         item_name: String::from("teardown"),
         baseline: baseline.summary.phases_ns.teardown.median_ns,
         candidate: candidate.summary.phases_ns.teardown.median_ns,
-        abs_delta: get_abs_delta(
+        delta: get_delta(
             baseline.summary.phases_ns.teardown.median_ns,
             candidate.summary.phases_ns.teardown.median_ns,
         ),
@@ -511,7 +519,7 @@ fn get_perf_comparisons(
                                     event_name: b_event.0.to_string(),
                                     baseline: *b_event.1,
                                     candidate: *c_event.1,
-                                    abs_delta: get_abs_delta(*b_event.1, *c_event.1),
+                                    delta: get_delta(*b_event.1, *c_event.1),
                                     percent_delta: get_percent_delta(*b_event.1, *c_event.1),
                                 });
                             }
@@ -525,6 +533,67 @@ fn get_perf_comparisons(
             perf_comparisons
         }
     }
+}
+
+fn get_run_ipc(runner_json: &types::RunnerJson) -> types::RunIpcResult {
+    let mut run_ipc_result: types::RunIpcResult = types::RunIpcResult::default();
+
+    run_ipc_result.total_count = runner_json.samples.len();
+    let mut median_ipcs: Vec<OrderedFloat<f64>> = Vec::new();
+
+    for sample in &runner_json.samples {
+        if let Some(perf) = sample.perf.as_ref() {
+            let events = &perf.perf_events.events;
+            if events.is_empty() == false {
+                let instructions: Option<u64> = events.get("cpu_core/instructions/u").cloned();
+                let cycles: Option<u64> = events.get("cpu_core/cycles/u").cloned();
+
+                if let Some(cyc) = cycles {
+                    if let Some(ins) = instructions
+                        && cyc != 0u64
+                    {
+                        run_ipc_result.valid_count += 1;
+
+                        let ipc = OrderedFloat(ins as f64 / cyc as f64);
+                        summary::sort_arr(&mut median_ipcs, ipc);
+                    }
+                }
+            }
+        }
+    }
+
+    if median_ipcs.is_empty() {
+        run_ipc_result.median_ipc = None;
+    } else {
+        let median = summary::get_median(&median_ipcs);
+        run_ipc_result.median_ipc = Some(f64::from(median));
+    }
+    run_ipc_result
+}
+
+fn get_ipc_comparison(
+    baseline: &types::RunIpcResult,
+    candidate: &types::RunIpcResult,
+) -> types::DerivedMetricComparison {
+    let mut d_metric_comp = types::DerivedMetricComparison::default();
+
+    d_metric_comp.name = String::from("ipc");
+    d_metric_comp.baseline = baseline.median_ipc;
+    d_metric_comp.candidate = candidate.median_ipc;
+    d_metric_comp.baseline_total = baseline.total_count;
+    d_metric_comp.baseline_valid = baseline.valid_count;
+    d_metric_comp.candidate_total = candidate.total_count;
+    d_metric_comp.candidate_valid = candidate.valid_count;
+    d_metric_comp.delta = None;
+    d_metric_comp.delta_percent = None;
+
+    if let Some(b_ipc) = baseline.median_ipc {
+        if let Some(c_ipc) = candidate.median_ipc {
+            d_metric_comp.delta = Some(get_delta(b_ipc, c_ipc));
+            d_metric_comp.delta_percent = get_percent_delta(b_ipc, c_ipc);
+        }
+    }
+    d_metric_comp
 }
 
 fn verify_summary_perf_avail(
@@ -590,15 +659,23 @@ fn verify_workload_params_match(
     }
 }
 
-fn get_abs_delta(baseline_phase: u64, candidate_phase: u64) -> i64 {
-    candidate_phase as i64 - baseline_phase as i64
+fn get_delta<T: types::Delta>(baseline: T, candidate: T) -> T::Output {
+    T::delta(baseline, candidate)
 }
 
-fn get_percent_delta(baseline_phase: u64, candidate_phase: u64) -> Option<f64> {
-    match baseline_phase {
-        0 => None,
-        _ => Some((candidate_phase as f64 - baseline_phase as f64) / baseline_phase as f64 * 100.0),
+fn get_percent_delta<T>(baseline: T, candidate: T) -> Option<f64>
+where
+    T: types::Delta + ToPrimitive,
+    T::Output: ToPrimitive,
+{
+    let b = baseline.to_f64()?;
+
+    if b == 0.0 {
+        return None;
     }
+
+    let delta = T::delta(baseline, candidate).to_f64()?;
+    Some(delta / b * 100.0)
 }
 
 fn get_effective_threshold(
@@ -627,12 +704,19 @@ fn get_verdict(delta: Option<f64>, threshold: Option<f64>) -> types::Verdict {
     }
 }
 
-fn get_abs_delta_str(val: i64) -> String {
+fn get_delta_str(val: i128) -> String {
     format!("{:+}", val).to_string()
 }
 
-fn get_percent_delta_str(val: Option<f64>) -> String {
-    match val {
+fn get_3_dec_float_delta_str(value: Option<f64>) -> String {
+    match value {
+        None => String::from("N/A"),
+        Some(val) => format!("{:+.3}", val).to_string(),
+    }
+}
+
+fn get_percent_delta_str(value: Option<f64>) -> String {
+    match value {
         None => String::from("N/A"),
         Some(val) => format!("{:+.2}%", val).to_string(),
     }
@@ -649,6 +733,13 @@ fn get_threshold_percent_str(threshold: Option<f64>) -> String {
     match threshold {
         None => String::from("N/A"),
         Some(val) => format!("{:.2}%", val).to_string(),
+    }
+}
+
+fn get_3_dec_float_str(value: Option<f64>) -> String {
+    match value {
+        None => String::from("N/A"),
+        Some(val) => format!("{:.3}", val).to_string(),
     }
 }
 
@@ -688,7 +779,7 @@ impl<'cmp_g> types::CmpRenderer for types::TextCmpRenderer<'cmp_g> {
     }
 
     fn render_summary_phases(&self) {
-        const INDENT_LEN: usize = 25;
+        const INDENT_LEN: usize = 16;
 
         println!("Phase comparison:");
         println!(
@@ -710,7 +801,7 @@ impl<'cmp_g> types::CmpRenderer for types::TextCmpRenderer<'cmp_g> {
                 item.item_name,
                 item.baseline,
                 item.candidate,
-                get_abs_delta_str(item.abs_delta),
+                get_delta_str(item.delta),
                 get_percent_delta_str(item.percent_delta),
                 get_spread_percent_str(item.baseline_spread),
                 get_spread_percent_str(item.candidate_spread),
@@ -723,7 +814,7 @@ impl<'cmp_g> types::CmpRenderer for types::TextCmpRenderer<'cmp_g> {
     }
 
     fn render_summary_perf(&self) {
-        const INDENT_LEN: usize = 25;
+        const INDENT_LEN: usize = 16;
 
         if self
             .cmp_g_data
@@ -759,12 +850,51 @@ impl<'cmp_g> types::CmpRenderer for types::TextCmpRenderer<'cmp_g> {
                     item.event_name,
                     item.baseline,
                     item.candidate,
-                    get_abs_delta_str(item.abs_delta),
+                    get_delta_str(item.delta),
                     get_percent_delta_str(item.percent_delta),
                     w = INDENT_LEN
                 );
             }
         }
+        println!("");
+    }
+
+    fn render_derived_metrics(&self) {
+        const INDENT_LEN: usize = 16;
+
+        println!("Derived metrics (whole process):");
+        println!("");
+        for item in &self.cmp_g_data.derived_comparisons {
+            println!(
+                "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
+                "metric",
+                "baseline",
+                "candidate",
+                "delta",
+                "delta(%)",
+                w = INDENT_LEN
+            );
+            println!(
+                "\t{:<w$}{:<w$}{:<w$}{:<w$}{:<w$}",
+                item.name,
+                get_3_dec_float_str(item.baseline),
+                get_3_dec_float_str(item.candidate),
+                get_3_dec_float_delta_str(item.delta),
+                get_percent_delta_str(item.delta_percent),
+                w = INDENT_LEN
+            );
+            println!("");
+            println!("Coverage:");
+            println!(
+                "\tbaseline:\t{}/{}\tvalid",
+                item.baseline_valid, item.baseline_total,
+            );
+            println!(
+                "\tcandidate:\t{}/{}\tvalid",
+                item.candidate_valid, item.candidate_total,
+            );
+        }
+        println!("");
     }
 }
 
@@ -803,7 +933,7 @@ impl<'cmp_g> types::CmpRenderer for types::MarkdownCmpRenderer<'cmp_g> {
                 item.item_name,
                 item.baseline,
                 item.candidate,
-                get_abs_delta_str(item.abs_delta),
+                get_delta_str(item.delta),
                 get_percent_delta_str(item.percent_delta),
                 get_spread_percent_str(item.baseline_spread),
                 get_spread_percent_str(item.candidate_spread),
@@ -844,11 +974,40 @@ impl<'cmp_g> types::CmpRenderer for types::MarkdownCmpRenderer<'cmp_g> {
                     item.event_name,
                     item.baseline,
                     item.candidate,
-                    get_abs_delta_str(item.abs_delta),
+                    get_delta_str(item.delta),
                     get_percent_delta_str(item.percent_delta)
                 );
             }
         }
+        println!("");
+    }
+
+    fn render_derived_metrics(&self) {
+        println!("## Derived metrics (whole process):");
+        for item in &self.cmp_g_data.derived_comparisons {
+            println!(
+                "| {} | {} | {} | {} | {} |\n|---|---:|---:|---:|---:|",
+                "metric", "baseline", "candidate", "delta", "delta(%)",
+            );
+            println!(
+                "| {} | {} | {} | {} | {} |",
+                item.name,
+                get_3_dec_float_str(item.baseline),
+                get_3_dec_float_str(item.candidate),
+                get_3_dec_float_delta_str(item.delta),
+                get_percent_delta_str(item.delta_percent),
+            );
+            println!("");
+            println!("Coverage:");
+            println!(
+                "- ipc - baseline: {}/{} valid; candidate: {}/{} valid",
+                item.baseline_valid,
+                item.baseline_total,
+                item.candidate_valid,
+                item.candidate_total,
+            );
+        }
+        println!("");
     }
 }
 
@@ -867,7 +1026,7 @@ impl<'cmp_g> types::CmpRenderer for types::CsvCmpRenderer<'cmp_g> {
                 item.item_name,
                 item.baseline,
                 item.candidate,
-                get_abs_delta_str(item.abs_delta),
+                get_delta_str(item.delta),
                 get_percent_delta_str(item.percent_delta),
                 get_spread_percent_str(item.baseline_spread),
                 get_spread_percent_str(item.candidate_spread),
@@ -902,10 +1061,33 @@ impl<'cmp_g> types::CmpRenderer for types::CsvCmpRenderer<'cmp_g> {
                     item.event_name,
                     item.baseline,
                     item.candidate,
-                    get_abs_delta_str(item.abs_delta),
+                    get_delta_str(item.delta),
                     get_percent_delta_str(item.percent_delta),
                 );
             }
+        }
+    }
+
+    fn render_derived_metrics(&self) {
+        for item in &self.cmp_g_data.derived_comparisons {
+            println!(
+                "{},{},{},{},{},{},,,,",
+                "derived",
+                item.name,
+                get_3_dec_float_str(item.baseline),
+                get_3_dec_float_str(item.candidate),
+                get_3_dec_float_delta_str(item.delta),
+                get_percent_delta_str(item.delta_percent),
+            );
+            println!(
+                "{},{},{}/{},{}/{},,,,,,",
+                "derived_coverage",
+                item.name,
+                item.baseline_valid,
+                item.baseline_total,
+                item.candidate_valid,
+                item.candidate_total,
+            );
         }
     }
 }
@@ -1189,9 +1371,9 @@ mod tests {
 
     #[test]
     fn get_abs_delta_test() {
-        assert_eq!(20, get_abs_delta(100, 120));
-        assert_eq!(-20, get_abs_delta(120, 100));
-        assert_eq!(0, get_abs_delta(100, 100));
+        assert_eq!(20, get_delta(100, 120));
+        assert_eq!(-20, get_delta(120, 100));
+        assert_eq!(0, get_delta(100, 100));
     }
 
     #[test]
@@ -1266,9 +1448,9 @@ mod tests {
 
     #[test]
     fn get_abs_delta_str_test() {
-        assert_eq!(String::from("+20"), get_abs_delta_str(20));
-        assert_eq!(String::from("-20"), get_abs_delta_str(-20));
-        assert_eq!(String::from("+0"), get_abs_delta_str(0));
+        assert_eq!(String::from("+20"), get_delta_str(20));
+        assert_eq!(String::from("-20"), get_delta_str(-20));
+        assert_eq!(String::from("+0"), get_delta_str(0));
     }
 
     #[test]
@@ -2045,7 +2227,7 @@ mod tests {
         let compute = &phases[1];
         assert_eq!(1000, compute.baseline);
         assert_eq!(1100, compute.candidate);
-        assert_eq!(100, compute.abs_delta);
+        assert_eq!(100, compute.delta);
         assert_eq!(Some(10.0), compute.percent_delta);
         assert_eq!(Some(10.0), compute.baseline_spread);
         assert_eq!(Some(12.0), compute.candidate_spread);
@@ -2125,7 +2307,7 @@ mod tests {
         assert_eq!("cycles", perf[0].event_name);
         assert_eq!(100, perf[0].baseline);
         assert_eq!(120, perf[0].candidate);
-        assert_eq!(20, perf[0].abs_delta);
+        assert_eq!(20, perf[0].delta);
         assert_eq!(Some(20.0), perf[0].percent_delta);
 
         assert!(
