@@ -90,7 +90,7 @@ impl types::SummaryAttributes {
     }
 }
 
-fn sort_arr<T>(arr: &mut Vec<T>, new_val: T)
+pub fn sort_arr<T>(arr: &mut Vec<T>, new_val: T)
 where
     T: Ord,
 {
@@ -102,7 +102,7 @@ where
 ///
 /// # Preconditions
 /// `arr` must be sorted in ascending order.
-fn get_median<T>(arr: &Vec<T>) -> T
+pub fn get_median<T>(arr: &Vec<T>) -> T
 where
     T: Ord + Add<Output = T> + Div<T, Output = T> + Copy + FromPrimitive,
 {
